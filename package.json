@@ -7,7 +7,7 @@
         "dev": "vite"
     },
     "engines": {
-        "node": ">=20.19.0"
+        "node": "20.x"
     },
     "devDependencies": {
         "@tailwindcss/forms": "^0.5.2",

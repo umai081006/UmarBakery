@@ -1,0 +1,27 @@
+#!/bin/bash
+# ============================================================
+# Umar Bakery — Cron / Laravel Scheduler Configuration
+# ============================================================
+# USAGE:
+#   Run: crontab -e
+#   Then add the line below (change path to your project root):
+# ============================================================
+
+* * * * * cd /var/www/umarbakery && php artisan schedule:run >> /dev/null 2>&1
+
+# ============================================================
+# EXPLANATION:
+#   - Runs every minute (required by Laravel scheduler)
+#   - Laravel's schedule:run internally decides which commands to execute
+#   - Output is suppressed to prevent cron email spam
+# ============================================================
+#
+# WHAT THIS COVERS (If Umar Bakery has any scheduled commands):
+#   - Failed job cleanup
+#   - Session GC
+#   - Any future artisan commands scheduled in console.php
+#
+# TO VERIFY SCHEDULER IS WORKING:
+#   Run: php artisan schedule:list
+#   to see all registered scheduled commands.
+# ============================================================

@@ -30,8 +30,13 @@ class PaymentWebhookController extends Controller
             return response()->json(['message' => 'OK']);
         } catch (Exception $e) {
             Log::error('Webhook Error: ' . $e->getMessage(), ['payload' => $request->all()]);
-            // Midtrans webhook requires 200/400.
-            // 400 is returned for bad signature or invalid data to stop it but show failure.
+            
+            // Jika error karena payment tidak ditemukan (seperti saat Midtrans mengirim Test Notification),
+            // kita harus membalas dengan HTTP 200 agar Midtrans menganggap test berhasil dan tidak melakukan retry berulang kali.
+            if (str_contains($e->getMessage(), 'Payment not found') || str_contains($e->getMessage(), 'Invalid payload')) {
+                return response()->json(['message' => 'OK, ignored (test or missing order)'], 200);
+            }
+            
             return response()->json(['message' => $e->getMessage()], 400);
         }
     }

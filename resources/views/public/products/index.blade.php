@@ -52,8 +52,15 @@
                         </a>
                         
                         @foreach($categories as $category)
-                            <a href="{{ route('products.index', array_merge(request()->query(), ['category' => $category->slug])) }}" class="flex items-center justify-between text-sm px-4 py-2.5 rounded-2xl {{ request('category') === $category->slug ? 'bg-cocoa text-white font-semibold' : 'text-cocoa/70 hover:bg-dough/30 hover:text-cocoa' }} transition-all duration-200">
-                                <span>{{ $category->name }}</span>
+                            <a href="{{ route('products.index', array_merge(request()->query(), ['category' => $category->slug])) }}" class="flex items-center justify-between text-sm px-4 py-2.5 rounded-2xl {{ request('category') === $category->slug ? 'bg-cocoa text-white font-semibold' : 'text-cocoa/70 hover:bg-dough/30 hover:text-cocoa' }} transition-all duration-200 group">
+                                <div class="flex items-center gap-3">
+                                    @if($category->image)
+                                        <img src="{{ $category->image }}" alt="{{ $category->name }}" class="w-6 h-6 rounded-md object-cover border border-white/20 shadow-sm">
+                                    @else
+                                        <div class="w-6 h-6 rounded-md bg-white/20 flex items-center justify-center text-[8px] font-bold">UB</div>
+                                    @endif
+                                    <span>{{ $category->name }}</span>
+                                </div>
                                 <span class="text-xs {{ request('category') === $category->slug ? 'bg-white/20' : 'bg-dough/50 text-cocoa/60' }} px-2 py-0.5 rounded-full font-mono">
                                     {{ $category->products_count ?? $category->products()->where('is_active', true)->count() }}
                                 </span>

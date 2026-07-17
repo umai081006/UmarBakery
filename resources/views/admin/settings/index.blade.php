@@ -15,7 +15,7 @@
     @endif
 
     <div class="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
-        <form action="{{ route('admin.settings.update') }}" method="POST" class="p-8 space-y-8">
+        <form action="{{ route('admin.settings.update') }}" method="POST" enctype="multipart/form-data" class="p-8 space-y-8">
             @csrf
 
             <!-- Hero Section -->
@@ -24,9 +24,15 @@
                 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-semibold text-stone-700 mb-1">Background Image URL (Hero)</label>
-                        <input type="text" name="hero_bg" value="{{ $settings['hero_bg']->value ?? 'https://images.unsplash.com/photo-1509440159596-0249088772ff?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80' }}" class="w-full border-stone-300 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-200 transition">
-                        <p class="text-xs text-stone-500 mt-1">Masukkan URL gambar (Unsplash/Imgur dll) untuk background utama halaman beranda.</p>
+                        <label class="block text-sm font-semibold text-stone-700 mb-1">Background Image (Hero)</label>
+                        @if(isset($settings['hero_bg']->value))
+                            <div class="mb-3">
+                                <img src="{{ $settings['hero_bg']->value }}" alt="Hero Preview" class="h-32 w-auto object-cover rounded-xl border border-stone-200">
+                            </div>
+                        @endif
+                        <input type="hidden" name="hero_bg" value="{{ $settings['hero_bg']->value ?? 'https://images.unsplash.com/photo-1509440159596-0249088772ff?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80' }}">
+                        <input type="file" name="hero_bg_file" accept="image/*" class="w-full border-stone-300 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-200 transition">
+                        <p class="text-xs text-stone-500 mt-1">Upload gambar background utama halaman beranda.</p>
                     </div>
                 </div>
             </div>
@@ -37,8 +43,15 @@
                 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-semibold text-stone-700 mb-1">Image URL (Tentang Kami)</label>
-                        <input type="text" name="about_img" value="{{ $settings['about_img']->value ?? 'https://images.unsplash.com/photo-1517433622965-0e62058e235e?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' }}" class="w-full border-stone-300 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-200 transition">
+                        <label class="block text-sm font-semibold text-stone-700 mb-1">Image (Tentang Kami)</label>
+                        @if(isset($settings['about_img']->value))
+                            <div class="mb-3">
+                                <img src="{{ $settings['about_img']->value }}" alt="About Preview" class="h-32 w-auto object-cover rounded-xl border border-stone-200">
+                            </div>
+                        @endif
+                        <input type="hidden" name="about_img" value="{{ $settings['about_img']->value ?? 'https://images.unsplash.com/photo-1517433622965-0e62058e235e?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' }}">
+                        <input type="file" name="about_img_file" accept="image/*" class="w-full border-stone-300 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-200 transition">
+                        <p class="text-xs text-stone-500 mt-1">Upload gambar untuk bagian Tentang Umar Bakery.</p>
                     </div>
                 </div>
             </div>
@@ -49,8 +62,15 @@
                 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-semibold text-stone-700 mb-1">Image URL (Behind the Bake)</label>
-                        <input type="text" name="process_img" value="{{ $settings['process_img']->value ?? 'https://images.unsplash.com/photo-1486427944781-dbf259a2b4a7?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' }}" class="w-full border-stone-300 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-200 transition">
+                        <label class="block text-sm font-semibold text-stone-700 mb-1">Image (Behind the Bake)</label>
+                        @if(isset($settings['process_img']->value))
+                            <div class="mb-3">
+                                <img src="{{ $settings['process_img']->value }}" alt="Process Preview" class="h-32 w-auto object-cover rounded-xl border border-stone-200">
+                            </div>
+                        @endif
+                        <input type="hidden" name="process_img" value="{{ $settings['process_img']->value ?? 'https://images.unsplash.com/photo-1486427944781-dbf259a2b4a7?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' }}">
+                        <input type="file" name="process_img_file" accept="image/*" class="w-full border-stone-300 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-200 transition">
+                        <p class="text-xs text-stone-500 mt-1">Upload gambar untuk bagian Behind the Bake.</p>
                     </div>
                 </div>
             </div>

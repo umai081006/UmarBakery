@@ -62,7 +62,12 @@
                 Semua Menu
             </a>
             @foreach($categories as $category)
-                <a href="{{ route('products.index', ['category' => $category->slug]) }}" class="snap-start shrink-0 px-6 py-2.5 rounded-full text-sm font-mono font-semibold transition-colors bg-dough/50 text-cocoa hover:bg-caramel hover:text-white border border-transparent">
+                <a href="{{ route('products.index', ['category' => $category->slug]) }}" class="snap-start shrink-0 flex items-center gap-2 pl-2 pr-5 py-1.5 rounded-full text-sm font-mono font-semibold transition-colors bg-dough/50 text-cocoa hover:bg-caramel hover:text-white border border-transparent group">
+                    @if($category->image)
+                        <img src="{{ $category->image }}" alt="{{ $category->name }}" class="w-7 h-7 rounded-full object-cover border border-white/50 shadow-sm">
+                    @else
+                        <div class="w-7 h-7 rounded-full bg-white/50 flex items-center justify-center text-[10px] font-bold text-cocoa group-hover:text-caramel">UB</div>
+                    @endif
                     {{ $category->name }}
                 </a>
             @endforeach

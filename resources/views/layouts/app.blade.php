@@ -71,15 +71,17 @@
                 <a href="{{ route('products.index') }}" class="{{ request()->routeIs('products.*') ? 'text-caramel' : 'text-cocoa/40' }} hover:text-caramel transition-colors p-2">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </a>
-                <a href="{{ route('cart.index') }}" class="{{ request()->routeIs('cart.*') ? 'text-caramel' : 'text-cocoa/40' }} hover:text-caramel transition-colors p-2 relative">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
-                    @auth
-                        @php $cartCount = \App\Models\Cart::where('user_id', auth()->id())->sum('quantity'); @endphp
-                        @if($cartCount > 0)
-                            <span class="absolute top-1 right-1 w-2.5 h-2.5 bg-strawberry rounded-full"></span>
-                        @endif
-                    @endauth
-                </a>
+                @if(!auth()->check() || auth()->user()->isCustomer())
+                    <a href="{{ route('cart.index') }}" class="{{ request()->routeIs('cart.*') ? 'text-caramel' : 'text-cocoa/40' }} hover:text-caramel transition-colors p-2 relative">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+                        @auth
+                            @php $cartCount = \App\Models\Cart::where('user_id', auth()->id())->sum('quantity'); @endphp
+                            @if($cartCount > 0)
+                                <span class="absolute top-1 right-1 w-2.5 h-2.5 bg-strawberry rounded-full"></span>
+                            @endif
+                        @endauth
+                    </a>
+                @endif
                 <a href="{{ route('customer.wishlists.index') }}" class="{{ request()->routeIs('customer.wishlists.*') ? 'text-caramel' : 'text-cocoa/40' }} hover:text-caramel transition-colors p-2">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
                 </a>

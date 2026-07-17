@@ -34,19 +34,32 @@
             </div>
 
             <!-- Right Side (Search, Cart & Profile) -->
-            <div class="flex items-center space-x-1 md:space-x-3">
-                <button :class="{ 'text-cocoa': scrolled || !{{ $isHomeStr }}, 'text-white': !scrolled && {{ $isHomeStr }} }" class="p-2 rounded-full hover:bg-dough/20 transition-colors hidden md:block">
+            <div class="flex items-center space-x-1 md:space-x-3 relative" x-data="{ searchOpen: false }">
+                
+                <!-- Search Form Dropdown -->
+                <div x-show="searchOpen" x-transition.opacity @click.away="searchOpen = false" class="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-dough/30 p-2 z-50">
+                    <form action="{{ route('products.index') }}" method="GET" class="flex items-center relative">
+                        <input type="text" name="search" placeholder="Cari roti, pastry..." class="w-full bg-cream rounded-xl border-none focus:ring-0 text-sm text-cocoa py-2 pl-4 pr-10 placeholder-cocoa/50" x-ref="searchInput">
+                        <button type="submit" class="absolute right-2 p-1 text-cocoa/50 hover:text-caramel transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </button>
+                    </form>
+                </div>
+
+                <button @click="searchOpen = !searchOpen; if(searchOpen) $nextTick(() => $refs.searchInput.focus())" :class="{ 'text-cocoa': scrolled || !{{ $isHomeStr }}, 'text-white': !scrolled && {{ $isHomeStr }} }" class="p-2 rounded-full hover:bg-dough/20 transition-colors hidden md:block">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </button>
-                <a href="{{ route('cart.index') }}" :class="{ 'text-cocoa': scrolled || !{{ $isHomeStr }}, 'text-white': !scrolled && {{ $isHomeStr }} }" class="p-2 rounded-full hover:bg-dough/20 transition-colors relative">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
-                    @auth
-                        @php $cartCount = \App\Models\Cart::where('user_id', auth()->id())->sum('quantity'); @endphp
-                        @if($cartCount > 0)
-                            <span class="absolute top-0 right-0 w-4 h-4 bg-caramel text-white text-[9px] font-bold flex items-center justify-center rounded-full border border-white">{{ $cartCount }}</span>
-                        @endif
-                    @endauth
-                </a>
+                @if(!auth()->check() || auth()->user()->isCustomer())
+                    <a href="{{ route('cart.index') }}" :class="{ 'text-cocoa': scrolled || !{{ $isHomeStr }}, 'text-white': !scrolled && {{ $isHomeStr }} }" class="p-2 rounded-full hover:bg-dough/20 transition-colors relative">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                        @auth
+                            @php $cartCount = \App\Models\Cart::where('user_id', auth()->id())->sum('quantity'); @endphp
+                            @if($cartCount > 0)
+                                <span class="absolute top-0 right-0 w-4 h-4 bg-caramel text-white text-[9px] font-bold flex items-center justify-center rounded-full border border-white">{{ $cartCount }}</span>
+                            @endif
+                        @endauth
+                    </a>
+                @endif
                 <a href="{{ auth()->check() ? route('dashboard') : route('login') }}" :class="{ 'text-cocoa': scrolled || !{{ $isHomeStr }}, 'text-white': !scrolled && {{ $isHomeStr }} }" class="p-2 rounded-full hover:bg-dough/20 transition-colors hidden md:block">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
                 </a>

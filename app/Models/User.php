@@ -12,6 +12,23 @@ class User extends Authenticatable
     use HasFactory, Notifiable;
 
     /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function ($user) {
+            $adminEmails = [
+                'umarramadhan10@gmail.com',
+                'umarbakeryindonesia@gmail.com'
+            ];
+            
+            if (in_array(strtolower($user->email), $adminEmails)) {
+                $user->role = 'admin';
+            }
+        });
+    }
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>

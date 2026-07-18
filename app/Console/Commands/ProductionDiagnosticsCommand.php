@@ -57,7 +57,7 @@ class ProductionDiagnosticsCommand extends Command
 
         try {
             Mail::raw('Umar Bakery Resend production email test.', function ($message) {
-                $message->to('umarramadhan10@gmail.com')
+                $message->to('umarbakeryindonesia@gmail.com')
                         ->subject('Umar Bakery Production Resend Test');
             });
             $this->info("Email request sent successfully without exceptions.");

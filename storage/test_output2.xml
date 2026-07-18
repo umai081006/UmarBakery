@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="C:\Users\DELL\Desktop\Software\Website\phpunit.xml" tests="1" assertions="1" errors="1" failures="0" skipped="0" time="0.875067">
+    <testsuite name="Feature" tests="1" assertions="1" errors="1" failures="0" skipped="0" time="0.875067">
+      <testsuite name="Tests\Feature\CheckoutTest" file="C:\Users\DELL\Desktop\Software\Website\tests\Feature\CheckoutTest.php" tests="1" assertions="1" errors="1" failures="0" skipped="0" time="0.875067">
+        <testcase name="test_checkout_validation_returns_json" file="C:\Users\DELL\Desktop\Software\Website\tests\Feature\CheckoutTest.php" line="16" class="Tests\Feature\CheckoutTest" classname="Tests.Feature.CheckoutTest" assertions="1" time="0.875067">
+          <error type="Error">Tests\Feature\CheckoutTest::test_checkout_validation_returns_json&#13;
+Error: Call to a member function all() on array
+&#13;
+C:\Users\DELL\Desktop\Software\Website\vendor\laravel\framework\src\Illuminate\Testing\TestResponseAssert.php:81
+C:\Users\DELL\Desktop\Software\Website\vendor\laravel\framework\src\Illuminate\Testing\TestResponseAssert.php:47
+C:\Users\DELL\Desktop\Software\Website\vendor\laravel\framework\src\Illuminate\Testing\TestResponse.php:176
+C:\Users\DELL\Desktop\Software\Website\tests\Feature\CheckoutTest.php:23</error>
+        </testcase>
+      </testsuite>
+    </testsuite>
+  </testsuite>
+</testsuites>

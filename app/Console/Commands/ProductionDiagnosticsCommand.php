@@ -128,7 +128,7 @@ class ProductionDiagnosticsCommand extends Command
                     $payload = [
                         'origin_area_id' => $biteOrigin,
                         'destination_area_id' => $destId,
-                        'couriers' => 'jne,jnt,sicepat,anteraja,ninja,grab,gojek,paxel,pos,tiki,lion,idexpress',
+                        'couriers' => config('services.biteship.couriers'),
                         'items' => [
                             [
                                 'name' => 'Test Item',

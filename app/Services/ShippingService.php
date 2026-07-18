@@ -60,19 +60,25 @@ class ShippingService
     ): array {
         $rates = [];
 
-        // STEP 1: Biteship live rates (requires valid area ID)
+        // STEP 1: Admin DeliveryZone (Internal Courier) - Prioritized
+        $zoneRates = $this->getZoneRates($province, $city, $district);
+        if (!empty($zoneRates)) {
+            $rates = array_merge($rates, $zoneRates);
+        }
+
+        // STEP 2: Biteship live rates (External Courier)
         if ($this->apiEnabled) {
             $destinationAreaId = $biteshipAreaId ?? $this->resolveAreaId($province, $city, $district);
 
             if ($destinationAreaId) {
                 try {
-                    $rates = $this->fetchBiteshipRates($destinationAreaId, $totalWeightGrams, $orderValueIdr);
+                    $biteshipRates = $this->fetchBiteshipRates($destinationAreaId, $totalWeightGrams, $orderValueIdr);
+                    $rates = array_merge($rates, $biteshipRates);
                 } catch (\Throwable $e) {
                     Log::error('[shipping] Biteship rates exception', [
                         'error'   => $e->getMessage(),
                         'area_id' => $destinationAreaId,
                     ]);
-                    $rates = [];
                 }
             } else {
                 Log::info('[shipping] Biteship: could not resolve area ID, trying fallback', [
@@ -81,11 +87,6 @@ class ShippingService
                     'district' => $district,
                 ]);
             }
-        }
-
-        // STEP 2: Fallback to admin DeliveryZone
-        if (empty($rates)) {
-            $rates = $this->getZoneRates($province, $city, $district);
         }
 
         if (empty($rates)) {
@@ -246,7 +247,7 @@ class ShippingService
         $payload = [
             'origin_area_id'      => $this->originAreaId,
             'destination_area_id' => $destinationAreaId,
-            'couriers'            => 'jne,jnt,sicepat,anteraja,ninja,grab,gojek,paxel,pos,tiki,lion,idexpress',
+            'couriers'            => config('services.biteship.couriers'),
             'items'               => [
                 [
                     'name'        => 'Umar Bakery Order',

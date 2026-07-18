@@ -38,6 +38,7 @@ return [
     'biteship' => [
         'api_key'        => env('BITESHIP_API_KEY'),
         'origin_area_id' => env('BITESHIP_ORIGIN_AREA_ID'),
+        'couriers'       => env('BITESHIP_COURIERS', 'jne,jnt,sicepat,anteraja,ninja,grab,gojek,paxel,pos,tiki,lion,idexpress'),
     ],
 
 ];

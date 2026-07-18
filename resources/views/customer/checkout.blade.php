@@ -9,9 +9,46 @@
         selectedShipping: null,
         subtotal: {{ $subtotal }},
         discount_amount: {{ $discount_amount ?? 0 }},
+        errorMessage: '',
+        notes: '',
         
         get total() {
             return (this.subtotal - this.discount_amount) + (this.selectedShipping ? this.selectedShipping.price : 0);
+        },
+
+        async submitCheckout() {
+            if (this.isSubmitting) return;
+            this.isSubmitting = true;
+            this.errorMessage = '';
+
+            try {
+                let formData = new FormData();
+                formData.append('address_id', this.selectedAddressId);
+                formData.append('shipping_price', this.selectedShipping?.price || 0);
+                formData.append('courier_name', this.selectedShipping?.courier_name || '');
+                formData.append('courier_service', this.selectedShipping?.courier_service || '');
+                formData.append('shipping_type', this.selectedShipping?.type || '');
+                formData.append('notes', this.notes);
+                formData.append('_token', '{{ csrf_token() }}');
+
+                let res = await fetch('{{ route('checkout.store') }}', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' },
+                    body: formData
+                });
+
+                let data = await res.json();
+                
+                if (res.ok && data.success) {
+                    window.location.href = data.redirect_url;
+                } else {
+                    this.errorMessage = data.message || 'Gagal memproses pesanan. Silakan coba lagi.';
+                    this.isSubmitting = false;
+                }
+            } catch (e) {
+                this.errorMessage = 'Terjadi kesalahan jaringan atau server. Silakan coba lagi.';
+                this.isSubmitting = false;
+            }
         },
         
         async fetchRates(addressId) {
@@ -166,9 +203,14 @@
                     <input type="hidden" name="courier_service" :value="selectedShipping?.courier_service || ''">
                     <input type="hidden" name="shipping_type" :value="selectedShipping?.type || ''">
                     
-                    <div class="mb-8">
+                    <!-- Error Message Display -->
+                    <div x-show="errorMessage" x-transition style="display: none;" class="mt-4 p-4 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl text-xs font-mono font-semibold">
+                        <span x-text="errorMessage"></span>
+                    </div>
+
+                    <div class="mb-8 mt-4">
                         <label for="notes" class="block text-xs font-mono font-semibold text-cocoa uppercase tracking-widest mb-3">Catatan Pesanan (Opsional)</label>
-                        <textarea name="notes" id="notes" rows="2" class="w-full px-4 py-3 rounded-2xl border border-dough/50 bg-cream/30 focus:bg-white focus:outline-none focus:ring-2 focus:ring-caramel focus:border-caramel text-sm font-sans placeholder-cocoa/30 transition-colors" placeholder="Misal: Tolong titipkan di pos satpam">{{ old('notes') }}</textarea>
+                        <textarea x-model="notes" id="notes" rows="2" class="w-full px-4 py-3 rounded-2xl border border-dough/50 bg-cream/30 focus:bg-white focus:outline-none focus:ring-2 focus:ring-caramel focus:border-caramel text-sm font-sans placeholder-cocoa/30 transition-colors" placeholder="Misal: Tolong titipkan di pos satpam"></textarea>
                     </div>
 
                     <div class="bg-dough/20 p-5 rounded-2xl border border-dough flex items-start gap-4 mb-8">

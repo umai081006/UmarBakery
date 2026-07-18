@@ -86,7 +86,7 @@ class CheckoutController extends Controller
      * The shipping_price from the frontend is ONLY used to identify which rate was selected;
      * the actual price is always re-fetched and validated from the server.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request)
     {
         $request->validate([
             'address_id'        => 'required|integer',
@@ -104,13 +104,13 @@ class CheckoutController extends Controller
                 ->firstOrFail();
 
             if (!$address->province || !$address->city) {
-                return redirect()->back()->withInput()->with('error', 'Alamat tidak lengkap. Silakan edit alamat dan pilih provinsi/kota.');
+                return $this->respondError($request, 'Alamat tidak lengkap. Silakan edit alamat dan pilih provinsi/kota.');
             }
 
             // 2. SERVER-SIDE: Re-fetch shipping rates to validate the selection
             $cartData = $this->cartService->getCartWithTotal($request->user());
             if ($cartData['items']->isEmpty()) {
-                return redirect()->route('cart.index')->with('error', 'Keranjang Anda kosong.');
+                return $this->respondError($request, 'Keranjang Anda kosong.', route('cart.index'));
             }
 
             // Lazy-resolve Biteship area ID if not yet saved on this address
@@ -131,7 +131,7 @@ class CheckoutController extends Controller
             );
 
             if (empty($serverRates)) {
-                return redirect()->back()->withInput()->with('error', 'Ongkos kirim tidak tersedia untuk alamat ini. Silakan pilih alamat lain.');
+                return $this->respondError($request, 'Ongkos kirim tidak tersedia untuk alamat ini. Silakan pilih alamat lain.');
             }
 
             // 3. Match the user's selection to a valid server-computed rate
@@ -158,7 +158,7 @@ class CheckoutController extends Controller
             }
 
             if (!$matchedRate) {
-                return redirect()->back()->withInput()->with('error', 'Opsi pengiriman yang dipilih tidak valid atau sudah tidak tersedia. Silakan pilih ulang.');
+                return $this->respondError($request, 'Opsi pengiriman yang dipilih tidak valid atau sudah tidak tersedia. Silakan pilih ulang.');
             }
 
             // 4. Build address snapshot with SERVER-VALIDATED shipping cost
@@ -195,19 +195,36 @@ class CheckoutController extends Controller
             $this->cartService->clearCart($request->user());
 
             // 8. Redirect to Midtrans Snap payment page
-            if (!empty($payment['redirect_url'])) {
-                return redirect($payment['redirect_url']);
+            $redirectUrl = !empty($payment['redirect_url']) ? $payment['redirect_url'] : route('customer.orders.show', $order->id);
+
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'redirect_url' => $redirectUrl,
+                    'message' => 'Pesanan berhasil dibuat! Silakan selesaikan pembayaran Anda.'
+                ]);
             }
 
-            return redirect()->route('customer.orders.show', $order->id)
-                ->with('success', 'Pesanan berhasil dibuat! Silakan selesaikan pembayaran Anda.');
+            return redirect($redirectUrl)->with('success', 'Pesanan berhasil dibuat! Silakan selesaikan pembayaran Anda.');
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return redirect()->back()->withInput()->with('error', 'Alamat tidak ditemukan.');
-        } catch (Exception $e) {
+            return $this->respondError($request, 'Alamat tidak ditemukan.');
+        } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Checkout store error', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            return redirect()->back()->withInput()->with('error', $e->getMessage());
+            return $this->respondError($request, $e->getMessage());
         }
+    }
+
+    private function respondError(Request $request, string $message, string $redirect = null)
+    {
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+            ], 400);
+        }
+        $r = $redirect ? redirect($redirect) : redirect()->back()->withInput();
+        return $r->with('error', $message);
     }
 
     /**

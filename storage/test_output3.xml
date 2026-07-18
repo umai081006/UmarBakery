@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="C:\Users\DELL\Desktop\Software\Website\phpunit.xml" tests="1" assertions="1" errors="0" failures="1" skipped="0" time="0.894844">
+    <testsuite name="Feature" tests="1" assertions="1" errors="0" failures="1" skipped="0" time="0.894844">
+      <testsuite name="Tests\Feature\CheckoutTest" file="C:\Users\DELL\Desktop\Software\Website\tests\Feature\CheckoutTest.php" tests="1" assertions="1" errors="0" failures="1" skipped="0" time="0.894844">
+        <testcase name="test_checkout_validation_returns_json" file="C:\Users\DELL\Desktop\Software\Website\tests\Feature\CheckoutTest.php" line="16" class="Tests\Feature\CheckoutTest" classname="Tests.Feature.CheckoutTest" assertions="1" time="0.894844">
+          <failure type="PHPUnit\Framework\ExpectationFailedException">Tests\Feature\CheckoutTest::test_checkout_validation_returns_json&#13;
+Failed asserting that 302 matches expected 422.
+&#13;
+C:\Users\DELL\Desktop\Software\Website\tests\Feature\CheckoutTest.php:24</failure>
+        </testcase>
+      </testsuite>
+    </testsuite>
+  </testsuite>
+</testsuites>

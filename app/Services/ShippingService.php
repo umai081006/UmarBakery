@@ -246,6 +246,7 @@ class ShippingService
         $payload = [
             'origin_area_id'      => $this->originAreaId,
             'destination_area_id' => $destinationAreaId,
+            'couriers'            => 'jne,jnt,sicepat,anteraja,ninja,grab,gojek,paxel,pos,tiki,lion,idexpress',
             'items'               => [
                 [
                     'name'        => 'Umar Bakery Order',

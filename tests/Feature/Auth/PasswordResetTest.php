@@ -3,9 +3,11 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Notifications\CustomResetPasswordNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Password;
 use Tests\TestCase;
 
 class PasswordResetTest extends TestCase
@@ -25,49 +27,82 @@ class PasswordResetTest extends TestCase
 
         $user = User::factory()->create();
 
-        $this->post('/forgot-password', ['email' => $user->email]);
+        $response = $this->post('/forgot-password', [
+            'email' => $user->email,
+        ]);
 
-        Notification::assertSentTo($user, ResetPassword::class);
+        $response->assertSessionHas('status', 'Jika email tersebut terdaftar, kami telah mengirimkan instruksi reset password.');
+
+        Notification::assertSentTo($user, CustomResetPasswordNotification::class);
+    }
+
+    public function test_non_existent_email_returns_same_generic_response(): void
+    {
+        Notification::fake();
+
+        $response = $this->post('/forgot-password', [
+            'email' => 'doesnotexist@example.com',
+        ]);
+
+        $response->assertSessionHas('status', 'Jika email tersebut terdaftar, kami telah mengirimkan instruksi reset password.');
+        
+        Notification::assertNothingSent();
     }
 
     public function test_reset_password_screen_can_be_rendered(): void
     {
-        Notification::fake();
+        $response = $this->get('/reset-password/fake-token?email=test@example.com');
 
-        $user = User::factory()->create();
-
-        $this->post('/forgot-password', ['email' => $user->email]);
-
-        Notification::assertSentTo($user, ResetPassword::class, function ($notification) {
-            $response = $this->get('/reset-password/'.$notification->token);
-
-            $response->assertStatus(200);
-
-            return true;
-        });
+        $response->assertStatus(200);
     }
 
-    public function test_password_can_be_reset_with_valid_token(): void
+    public function test_password_can_be_reset_with_valid_token_and_auto_login(): void
     {
-        Notification::fake();
+        $user = User::factory()->create([
+            'password' => Hash::make('old-password'),
+        ]);
 
-        $user = User::factory()->create();
+        $token = Password::createToken($user);
 
-        $this->post('/forgot-password', ['email' => $user->email]);
+        $response = $this->post('/reset-password', [
+            'token' => $token,
+            'email' => $user->email,
+            'password' => 'new-password123',
+            'password_confirmation' => 'new-password123',
+        ]);
 
-        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user) {
-            $response = $this->post('/reset-password', [
-                'token' => $notification->token,
-                'email' => $user->email,
-                'password' => 'password',
-                'password_confirmation' => 'password',
-            ]);
+        // After successful reset, it should auto-login and redirect to dashboard
+        $response->assertRedirect('/dashboard');
+        $response->assertSessionHas('status', 'Password berhasil diubah. Anda telah otomatis login.');
+        
+        // Ensure user is authenticated
+        $this->assertAuthenticatedAs($user);
+        
+        // Ensure password is changed
+        $this->assertTrue(Hash::check('new-password123', $user->fresh()->password));
+        $this->assertFalse(Hash::check('old-password', $user->fresh()->password));
+    }
 
-            $response
-                ->assertSessionHasNoErrors()
-                ->assertRedirect(route('login'));
+    public function test_password_is_not_reset_with_invalid_token(): void
+    {
+        $user = User::factory()->create([
+            'password' => Hash::make('old-password'),
+        ]);
 
-            return true;
-        });
+        $response = $this->post('/reset-password', [
+            'token' => 'invalid-token',
+            'email' => $user->email,
+            'password' => 'new-password123',
+            'password_confirmation' => 'new-password123',
+        ]);
+
+        // Should return back with error on email field (due to invalid token)
+        $response->assertSessionHasErrors('email');
+
+        // User should not be authenticated
+        $this->assertGuest();
+
+        // Password should remain unchanged
+        $this->assertTrue(Hash::check('old-password', $user->fresh()->password));
     }
 }

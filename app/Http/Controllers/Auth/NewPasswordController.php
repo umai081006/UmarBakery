@@ -52,12 +52,22 @@ class NewPasswordController extends Controller
             }
         );
 
-        // If the password was successfully reset, we will redirect the user back to
-        // the application's home authenticated view. If there is an error we can
-        // redirect them back to where they came from with their error message.
-        return $status == Password::PASSWORD_RESET
-                    ? redirect()->route('login')->with('status', __($status))
-                    : back()->withInput($request->only('email'))
-                        ->withErrors(['email' => __($status)]);
+        if ($status == Password::PASSWORD_RESET) {
+            // Find the user to auto-login
+            $user = User::where('email', $request->email)->first();
+            
+            if ($user) {
+                // AUTO LOGIN SECURE FLOW
+                \Illuminate\Support\Facades\Auth::login($user);
+                // Regenerate session to prevent session fixation
+                $request->session()->regenerate();
+                
+                return redirect()->route('dashboard')->with('status', 'Password berhasil diubah. Anda telah otomatis login.');
+            }
+        }
+
+        // Token invalid, expired, or other errors
+        return back()->withInput($request->only('email'))
+                     ->withErrors(['email' => __($status)]);
     }
 }

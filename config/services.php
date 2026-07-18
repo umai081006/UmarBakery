@@ -19,7 +19,7 @@ return [
     ],
 
     'resend' => [
-        'key' => env('RESEND_API_KEY'),
+        'key' => env('RESEND_API_KEY', env('RESEND_KEY')), // support both conventions
     ],
 
     'ses' => [
@@ -33,6 +33,11 @@ return [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
+    ],
+
+    'biteship' => [
+        'api_key'        => env('BITESHIP_API_KEY'),
+        'origin_area_id' => env('BITESHIP_ORIGIN_AREA_ID'),
     ],
 
 ];

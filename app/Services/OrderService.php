@@ -64,24 +64,37 @@ class OrderService
                 $orderNumber = 'UB-' . $today . '-' . str_pad($count + 1, 4, '0', STR_PAD_LEFT);
             }
 
-            // 4. Create Order
+            // 4. Resolve shipping cost
+            // shipping_cost is now provided by checkout (from ShippingService), not CartService
+            $shippingCost = $addressData['shipping_cost'] ?? $cartData['shipping_cost'];
+            $subtotal = $cartData['subtotal'];
+            $discountAmount = $cartData['discount_amount'] ?? 0;
+            $total = ($subtotal - $discountAmount) + $shippingCost;
+
+            // 5. Create Order
             $order = Order::create([
-                'user_id' => $user->id,
-                'order_number' => $orderNumber,
-                'status' => 'pending',
-                'recipient_name' => $addressData['recipient_name'],
-                'phone' => $addressData['phone'],
-                'address' => $addressData['address'],
-                'city' => $addressData['city'],
-                'postal_code' => $addressData['postal_code'],
-                'notes' => $addressData['notes'] ?? null,
-                'subtotal' => $cartData['subtotal'],
-                'shipping_cost' => $cartData['shipping_cost'],
-                'total' => $cartData['total'],
-                'payment_method' => $paymentMethod,
+                'user_id'          => $user->id,
+                'order_number'     => $orderNumber,
+                'status'           => 'pending',
+                'recipient_name'   => $addressData['recipient_name'],
+                'phone'            => $addressData['phone'],
+                'address'          => $addressData['address'],
+                'city'             => $addressData['city'],
+                'postal_code'      => $addressData['postal_code'],
+                'notes'            => $addressData['notes'] ?? null,
+                'subtotal'         => $subtotal,
+                'shipping_cost'    => $shippingCost,
+                'total'            => $total > 0 ? $total : 0,
+                'payment_method'   => $paymentMethod,
+                // Shipping snapshot
+                'province'         => $addressData['province'] ?? null,
+                'district'         => $addressData['district'] ?? null,
+                'courier_name'     => $addressData['courier_name'] ?? null,
+                'courier_service'  => $addressData['courier_service'] ?? null,
+                'shipping_type'    => $addressData['shipping_type'] ?? null,
             ]);
 
-            // 5. Create Order Items (snapshot)
+            // 6. Create Order Items (snapshot)
             foreach ($cartItems as $item) {
                 OrderItem::create([
                     'order_id' => $order->id,

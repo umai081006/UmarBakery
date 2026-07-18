@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Customer;
 
 use App\Http\Controllers\Controller;
+use App\Models\Address;
 use App\Services\CartService;
 use App\Services\OrderService;
 use App\Services\Payments\PaymentService;
+use App\Services\ShippingService;
 use Exception;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,12 +18,18 @@ class CheckoutController extends Controller
     protected $cartService;
     protected $orderService;
     protected $paymentService;
+    protected $shippingService;
 
-    public function __construct(CartService $cartService, OrderService $orderService, PaymentService $paymentService)
-    {
+    public function __construct(
+        CartService $cartService,
+        OrderService $orderService,
+        PaymentService $paymentService,
+        ShippingService $shippingService
+    ) {
         $this->cartService = $cartService;
         $this->orderService = $orderService;
         $this->paymentService = $paymentService;
+        $this->shippingService = $shippingService;
     }
 
     /**
@@ -30,53 +38,212 @@ class CheckoutController extends Controller
     public function index(Request $request): View|RedirectResponse
     {
         $cartData = $this->cartService->getCartWithTotal($request->user());
-        
+
         if ($cartData['items']->isEmpty()) {
             return redirect()->route('cart.index')->with('error', 'Keranjang belanja Anda kosong.');
         }
 
-        $cartData['addresses'] = $request->user()->addresses()->orderByDesc('is_default')->latest()->get();
+        $addresses = $request->user()->addresses()
+            ->with('deliveryZone')
+            ->orderByDesc('is_default')
+            ->latest()
+            ->get();
+
+        $cartData['addresses'] = $addresses;
+
+        // Pre-load shipping rates for default address if it has province/city
+        $defaultAddress = $addresses->firstWhere('is_default', true) ?? $addresses->first();
+        $shippingRates = [];
+
+        if ($defaultAddress && $defaultAddress->province && $defaultAddress->city) {
+            // Calculate total weight for shipping API
+            $totalWeight = $cartData['items']->sum(function ($item) {
+                return ($item->product->weight ?? 500) * $item->quantity;
+            });
+
+            $shippingRates = $this->shippingService->getRates(
+                $defaultAddress->province,
+                $defaultAddress->city,
+                $defaultAddress->district ?? '',
+                (int) $totalWeight,
+                (int) $cartData['subtotal'],
+            );
+        }
+
+        $cartData['shippingRates'] = $shippingRates;
+        $cartData['defaultAddressId'] = $defaultAddress?->id;
 
         return view('customer.checkout', $cartData);
     }
 
     /**
      * Handle checkout and order creation.
+     * SECURITY: All shipping cost validation is done server-side.
+     * The shipping_price from the frontend is ONLY used to identify which rate was selected;
+     * the actual price is always re-fetched and validated from the server.
      */
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'address_id' => 'required|exists:addresses,id',
-            'notes' => 'nullable|string|max:500',
+            'address_id'        => 'required|integer',
+            'courier_name'      => 'required|string|max:100',
+            'courier_service'   => 'required|string|max:50',
+            'shipping_type'     => 'required|in:biteship,manual',
+            'shipping_price'    => 'required|integer|min:0', // used only for matching, not trusted for total
+            'notes'             => 'nullable|string|max:500',
         ]);
 
         try {
-            $address = \App\Models\Address::where('id', $request->address_id)
+            // 1. Verify address belongs to authenticated user
+            $address = Address::where('id', $request->address_id)
                 ->where('user_id', $request->user()->id)
                 ->firstOrFail();
 
+            if (!$address->province || !$address->city) {
+                return redirect()->back()->withInput()->with('error', 'Alamat tidak lengkap. Silakan edit alamat dan pilih provinsi/kota.');
+            }
+
+            // 2. SERVER-SIDE: Re-fetch shipping rates to validate the selection
+            $cartData = $this->cartService->getCartWithTotal($request->user());
+            if ($cartData['items']->isEmpty()) {
+                return redirect()->route('cart.index')->with('error', 'Keranjang Anda kosong.');
+            }
+
+            $totalWeight = $cartData['items']->sum(fn($item) => ($item->product->weight ?? 500) * $item->quantity);
+
+            $serverRates = $this->shippingService->getRates(
+                $address->province,
+                $address->city,
+                $address->district ?? '',
+                (int) $totalWeight,
+                (int) $cartData['subtotal'],
+            );
+
+            if (empty($serverRates)) {
+                return redirect()->back()->withInput()->with('error', 'Ongkos kirim tidak tersedia untuk alamat ini. Silakan pilih alamat lain.');
+            }
+
+            // 3. Match the user's selection to a valid server-computed rate
+            $matchedRate = null;
+            foreach ($serverRates as $rate) {
+                if (
+                    strtolower($rate['courier_name']) === strtolower($request->courier_name) &&
+                    strtolower($rate['courier_service']) === strtolower($request->courier_service) &&
+                    $rate['type'] === $request->shipping_type
+                ) {
+                    $matchedRate = $rate;
+                    break;
+                }
+            }
+
+            // If courier/service combo not found but same type & price matches, allow (handles API variation)
+            if (!$matchedRate) {
+                foreach ($serverRates as $rate) {
+                    if ($rate['type'] === $request->shipping_type && $rate['price'] === (int) $request->shipping_price) {
+                        $matchedRate = $rate;
+                        break;
+                    }
+                }
+            }
+
+            if (!$matchedRate) {
+                return redirect()->back()->withInput()->with('error', 'Opsi pengiriman yang dipilih tidak valid atau sudah tidak tersedia. Silakan pilih ulang.');
+            }
+
+            // 4. Build address snapshot with SERVER-VALIDATED shipping cost
             $addressData = [
-                'recipient_name' => $address->recipient_name,
-                'phone' => $address->phone,
-                'address' => $address->address,
-                'city' => $address->city,
-                'postal_code' => $address->postal_code,
-                'notes' => $request->notes,
+                'recipient_name'  => $address->recipient_name,
+                'phone'           => $address->phone,
+                'address'         => $address->address,
+                'province'        => $address->province,
+                'city'            => $address->city,
+                'district'        => $address->district,
+                'postal_code'     => $address->postal_code,
+                'detail_address'  => $address->detail_address,
+                'notes'           => $request->notes,
+                // Shipping snapshot - from SERVER-COMPUTED rate, not frontend
+                'courier_name'    => $matchedRate['courier_name'],
+                'courier_service' => $matchedRate['courier_service'],
+                'shipping_type'   => $matchedRate['type'],
+                'shipping_cost'   => $matchedRate['price'], // SERVER-COMPUTED, tamper-proof
             ];
 
+            // 5. Create order (stock validation + snapshot inside)
             $order = $this->orderService->createOrder(
                 $request->user(),
                 $addressData,
-                'midtrans' // Using midtrans as payment method identifier
+                'midtrans'
             );
 
-            // Note: Snap Token generation and other side-effects 
-            // are now handled via OrderCreated event listeners!
+            // 6. Create Midtrans payment with final SERVER-COMPUTED total
+            $payment = $this->paymentService->createPayment($order);
+
+            // 7. Clear cart after order is safely created
+            $this->cartService->clearCart($request->user());
+
+            // 8. Redirect to Midtrans Snap payment page
+            if (!empty($payment['redirect_url'])) {
+                return redirect($payment['redirect_url']);
+            }
 
             return redirect()->route('customer.orders.show', $order->id)
                 ->with('success', 'Pesanan berhasil dibuat! Silakan selesaikan pembayaran Anda.');
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return redirect()->back()->withInput()->with('error', 'Alamat tidak ditemukan.');
         } catch (Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Checkout store error', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return redirect()->back()->withInput()->with('error', $e->getMessage());
         }
     }
+
+    /**
+     * AJAX: Get shipping rates for a specific address.
+     */
+    public function shippingRates(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $request->validate([
+            'address_id' => 'required|exists:addresses,id',
+        ]);
+
+        $address = Address::where('id', $request->address_id)
+            ->where('user_id', $request->user()->id)
+            ->firstOrFail();
+
+        if (!$address->province || !$address->city) {
+            return response()->json([
+                'available' => false,
+                'message' => 'Alamat ini belum memiliki informasi kota/provinsi. Silakan edit alamat terlebih dahulu.',
+                'rates' => [],
+            ]);
+        }
+
+        $cartData = $this->cartService->getCartWithTotal($request->user());
+        $totalWeight = $cartData['items']->sum(function ($item) {
+            return ($item->product->weight ?? 500) * $item->quantity;
+        });
+
+        $rates = $this->shippingService->getRates(
+            $address->province,
+            $address->city,
+            $address->district ?? '',
+            (int) $totalWeight,
+            (int) $cartData['subtotal'],
+        );
+
+        if (empty($rates)) {
+            return response()->json([
+                'available' => false,
+                'message' => 'Maaf, wilayah Anda belum dapat kami layani.',
+                'rates' => [],
+            ]);
+        }
+
+        return response()->json([
+            'available' => true,
+            'message' => '',
+            'rates' => $rates,
+        ]);
+    }
 }
+

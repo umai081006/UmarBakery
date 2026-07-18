@@ -15,9 +15,13 @@ class Address extends Model
         'label',
         'recipient_name',
         'phone',
+        'province',
         'address',
         'city',
+        'district',
         'postal_code',
+        'detail_address',
+        'delivery_zone_id',
         'is_default',
     ];
 
@@ -30,8 +34,22 @@ class Address extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function deliveryZone(): BelongsTo
+    {
+        return $this->belongsTo(DeliveryZone::class);
+    }
+
     public function getFullAddressAttribute(): string
     {
-        return "{$this->address}, {$this->city}, {$this->postal_code}";
+        $parts = array_filter([
+            $this->address,
+            $this->detail_address,
+            $this->district,
+            $this->city,
+            $this->province,
+            $this->postal_code,
+        ]);
+        return implode(', ', $parts);
     }
 }
+

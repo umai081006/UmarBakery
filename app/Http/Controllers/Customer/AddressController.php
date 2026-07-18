@@ -28,13 +28,17 @@ class AddressController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'label' => 'required|string|max:100',
-            'recipient_name' => 'required|string|max:255',
-            'phone' => 'required|string|max:20',
-            'address' => 'required|string|max:500',
-            'city' => 'required|string|max:100',
-            'postal_code' => 'required|string|max:10',
-            'is_default' => 'boolean',
+            'label'           => 'required|string|max:100',
+            'recipient_name'  => 'required|string|max:255',
+            'phone'           => 'required|string|max:20',
+            'province'        => 'required|string|max:100',
+            'city'            => 'required|string|max:100',
+            'district'        => 'nullable|string|max:100',
+            'postal_code'     => 'nullable|string|max:10',
+            'address'         => 'required|string|max:500',
+            'detail_address'  => 'nullable|string|max:500',
+            'delivery_zone_id'=> 'nullable|exists:delivery_zones,id',
+            'is_default'      => 'boolean',
         ]);
 
         try {
@@ -48,13 +52,17 @@ class AddressController extends Controller
     public function update(Request $request, Address $address): RedirectResponse
     {
         $data = $request->validate([
-            'label' => 'required|string|max:100',
-            'recipient_name' => 'required|string|max:255',
-            'phone' => 'required|string|max:20',
-            'address' => 'required|string|max:500',
-            'city' => 'required|string|max:100',
-            'postal_code' => 'required|string|max:10',
-            'is_default' => 'boolean',
+            'label'           => 'required|string|max:100',
+            'recipient_name'  => 'required|string|max:255',
+            'phone'           => 'required|string|max:20',
+            'province'        => 'required|string|max:100',
+            'city'            => 'required|string|max:100',
+            'district'        => 'nullable|string|max:100',
+            'postal_code'     => 'nullable|string|max:10',
+            'address'         => 'required|string|max:500',
+            'detail_address'  => 'nullable|string|max:500',
+            'delivery_zone_id'=> 'nullable|exists:delivery_zones,id',
+            'is_default'      => 'boolean',
         ]);
 
         try {

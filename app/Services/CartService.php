@@ -102,7 +102,7 @@ class CartService
             $subtotal += $item->item_total;
         }
 
-        $shipping_cost = 10000.00; // Fixed shipping flat rate for MVP
+        $shipping_cost = 0; // Shipping is calculated at checkout based on address + courier selection
         $discount_amount = 0;
         $promoCode = session('applied_promo_code');
         $promoMessage = null;

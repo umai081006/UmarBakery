@@ -37,34 +37,37 @@ class ProductionDiagnosticsCommand extends Command
 
         $this->info("");
         $this->info("==================================================");
-        $this->info("PRIORITAS 3 — SMTP PRODUCTION");
+        $this->info("MAIL PRODUCTION DIAGNOSTIC (HTTPS API)");
         $this->info("==================================================");
 
         $this->line("config('mail.default') => " . config('mail.default'));
         
-        $this->checkEnv('MAIL_HOST');
-        $this->checkEnv('MAIL_PORT');
-        $this->checkEnv('MAIL_USERNAME');
-        $this->checkEnv('MAIL_PASSWORD');
-        $this->checkEnv('MAIL_ENCRYPTION');
+        $this->checkEnv('MAIL_MAILER');
+        
+        $apiKey = env('BREVO_API_KEY');
+        $this->line('BREVO_API_KEY: ' . ($apiKey ? 'PRESENT' : 'MISSING'));
+        
+        $this->checkEnv('MAIL_FROM_ADDRESS');
+        $this->checkEnv('MAIL_FROM_NAME');
+
+        $this->line("Config cached: " . (app()->configurationIsCached() ? 'YES' : 'NO'));
 
         $this->info("");
         $this->info("==================================================");
-        $this->info("PRIORITAS 4 — TEST EMAIL NYATA (SMTP)");
+        $this->info("PRIORITAS 4 — TEST EMAIL NYATA (BREVO API)");
         $this->info("==================================================");
 
         try {
             // Attempt to send email to public recipient
-            Mail::raw('Umar Bakery SMTP production email test.', function ($message) {
+            Mail::raw('Umar Bakery API production email test.', function ($message) {
                 $message->to('umarramadhan10@gmail.com')
-                        ->subject('Umar Bakery Production SMTP Test');
+                        ->subject('Umar Bakery Production API Test');
             });
-            $this->info("Email request sent successfully to umarramadhan10@gmail.com without exceptions.");
+            $this->info("API_ACCEPTED: Email request accepted by provider to umarramadhan10@gmail.com without exceptions. (Delivery Unconfirmed)");
         } catch (Throwable $e) {
             $this->error("Email request FAILED!");
             $this->line("Exception: " . get_class($e));
             $this->line("Message: " . $e->getMessage());
-            $this->line("File: " . $e->getFile() . ":" . $e->getLine());
         }
 
         $this->info("");

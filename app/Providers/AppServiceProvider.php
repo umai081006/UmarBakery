@@ -42,5 +42,12 @@ class AppServiceProvider extends ServiceProvider
                 ]);
             }
         });
+
+        // Register Brevo custom transport
+        \Illuminate\Support\Facades\Mail::extend('brevo', function (array $config = []) {
+            return new \App\Mail\Transports\BrevoTransport(
+                $config['key'] ?? env('BREVO_API_KEY')
+            );
+        });
     }
 }

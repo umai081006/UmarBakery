@@ -51,9 +51,13 @@ class CustomResetPasswordNotification extends Notification
         return (new MailMessage)
             ->subject(Lang::get('Reset Password Akun Umar Bakery'))
             ->greeting('Halo, ' . $notifiable->name . '!')
-            ->line(Lang::get('Kami menerima permintaan untuk melakukan reset password pada akun Anda di Umar Bakery.'))
+            ->line(Lang::get('Kami menerima permintaan untuk mengatur ulang password akun Umar Bakery Anda.'))
+            ->line(Lang::get('Jika Anda memang meminta perubahan password, klik tombol di bawah ini:'))
             ->action(Lang::get('Reset Password'), $url)
             ->line(Lang::get('Link reset password ini akan kedaluwarsa dalam :count menit.', ['count' => config('auth.passwords.'.config('auth.defaults.passwords').'.expire')]))
-            ->line(Lang::get('Jika Anda tidak merasa melakukan permintaan ini, abaikan email ini dan akun Anda akan tetap aman.'));
+            ->line(Lang::get('Jika Anda tidak meminta perubahan password:'))
+            ->line(Lang::get('- abaikan email ini'))
+            ->line(Lang::get('- password Anda tidak berubah'))
+            ->line(Lang::get('- jangan bagikan link reset kepada siapapun'));
     }
 }

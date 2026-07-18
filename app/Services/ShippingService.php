@@ -80,7 +80,6 @@ class ShippingService
                 ->post('https://api.biteship.com/v1/rates/couriers', [
                     'origin_area_id'      => $this->originAreaId,
                     'destination_area_id' => $destinationAreaId,
-                    'couriers'            => 'gosend,grab_express,anteraja,jne,sicepat,paxel,borzo',
                     'items' => [
                         [
                             'name'        => 'Umar Bakery Order',
@@ -205,7 +204,6 @@ class ShippingService
                 ->post('https://api.biteship.com/v1/rates/couriers', [
                     'origin_area_id' => $this->originAreaId,
                     'destination_area_id' => $destinationAreaId,
-                    'couriers' => 'gosend,grab_express,anteraja,jne,sicepat,paxel,borzo',
                     'items' => [
                         [
                             'name' => 'Umar Bakery Order',

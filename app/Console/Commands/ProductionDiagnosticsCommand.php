@@ -37,30 +37,29 @@ class ProductionDiagnosticsCommand extends Command
 
         $this->info("");
         $this->info("==================================================");
-        $this->info("PRIORITAS 3 — RESEND PRODUCTION");
+        $this->info("PRIORITAS 3 — SMTP PRODUCTION");
         $this->info("==================================================");
 
         $this->line("config('mail.default') => " . config('mail.default'));
-        $resendKey = config('services.resend.key');
-        $this->line("config('services.resend.key') => " . ($resendKey ? 'PRESENT' : 'NULL'));
-
-        $hasResendClient = class_exists('\Resend\Client');
-        $this->line("Resend\Client class => " . ($hasResendClient ? 'AVAILABLE' : 'NOT FOUND'));
-
-        $hasResendTransport = class_exists('\Illuminate\Mail\Transport\ResendTransport');
-        $this->line("Laravel Resend Transport => " . ($hasResendTransport ? 'AVAILABLE' : 'NOT FOUND'));
+        
+        $this->checkEnv('MAIL_HOST');
+        $this->checkEnv('MAIL_PORT');
+        $this->checkEnv('MAIL_USERNAME');
+        $this->checkEnv('MAIL_PASSWORD');
+        $this->checkEnv('MAIL_ENCRYPTION');
 
         $this->info("");
         $this->info("==================================================");
-        $this->info("PRIORITAS 4 — TEST EMAIL NYATA");
+        $this->info("PRIORITAS 4 — TEST EMAIL NYATA (SMTP)");
         $this->info("==================================================");
 
         try {
-            Mail::raw('Umar Bakery Resend production email test.', function ($message) {
-                $message->to('umarbakeryindonesia@gmail.com')
-                        ->subject('Umar Bakery Production Resend Test');
+            // Attempt to send email to public recipient
+            Mail::raw('Umar Bakery SMTP production email test.', function ($message) {
+                $message->to('umarramadhan10@gmail.com')
+                        ->subject('Umar Bakery Production SMTP Test');
             });
-            $this->info("Email request sent successfully without exceptions.");
+            $this->info("Email request sent successfully to umarramadhan10@gmail.com without exceptions.");
         } catch (Throwable $e) {
             $this->error("Email request FAILED!");
             $this->line("Exception: " . get_class($e));

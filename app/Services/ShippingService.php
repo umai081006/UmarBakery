@@ -255,6 +255,7 @@ class ShippingService
                     'width'       => 20,
                     'height'      => 15,
                     'weight'      => max($weightGrams, 1),
+                    'quantity'    => 1,
                 ],
             ],
         ];

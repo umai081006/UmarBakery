@@ -125,7 +125,7 @@ class ProductionDiagnosticsCommand extends Command
             if ($destId && $biteOrigin) {
                 $this->info("\nTesting Rates API:");
                 try {
-                    $resp = Http::withToken($biteKey)->post('https://api.biteship.com/v1/rates/couriers', [
+                    $payload = [
                         'origin_area_id' => $biteOrigin,
                         'destination_area_id' => $destId,
                         'items' => [
@@ -137,9 +137,13 @@ class ProductionDiagnosticsCommand extends Command
                                 'width' => 20,
                                 'height' => 15,
                                 'weight' => 500,
+                                'quantity' => 1,
                             ]
                         ]
-                    ]);
+                    ];
+                    $this->line("Rates API Payload: " . json_encode($payload, JSON_PRETTY_PRINT));
+                    
+                    $resp = Http::withToken($biteKey)->post('https://api.biteship.com/v1/rates/couriers', $payload);
                     $this->line("HTTP Status: " . $resp->status());
                     if ($resp->successful()) {
                         $pricings = $resp->json('pricing', []);

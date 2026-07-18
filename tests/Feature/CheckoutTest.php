@@ -63,12 +63,32 @@ class CheckoutTest extends TestCase
                 'courier_service' => 'REG',
                 'shipping_type' => 'biteship',
                 'shipping_price' => 10000,
+            ], [
+                'Accept' => 'application/json',
+                'X-Requested-With' => 'XMLHttpRequest',
             ]);
 
+        $this->assertNotEquals(302, $response->getStatusCode(), "Should never return 302");
         $response->assertStatus(400)
             ->assertJson([
                 'success' => false,
                 'message' => 'Alamat tidak ditemukan.',
             ]);
+    }
+
+    public function test_checkout_never_returns_302_on_validation_failure_with_fetch_headers()
+    {
+        $user = User::factory()->create(['email_verified_at' => now()]);
+
+        // Mimicking frontend payload EXACTLY
+        $response = $this->actingAs($user)
+            ->post(route('checkout.store'), [], [
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+                'X-Requested-With' => 'XMLHttpRequest',
+            ]);
+
+        $this->assertNotEquals(302, $response->getStatusCode(), "Validation failure returned 302 instead of 422 JSON");
+        $response->assertStatus(422);
     }
 }

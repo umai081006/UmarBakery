@@ -88,25 +88,47 @@ class CheckoutController extends Controller
      */
     public function store(Request $request)
     {
-        \Illuminate\Support\Facades\Log::info('[checkout_debug] POST /checkout hit', [
+        \Illuminate\Support\Facades\Log::info('[checkout_trace] ENTER_STORE', [
             'method' => $request->method(),
             'accept_header' => $request->header('Accept'),
             'x_requested_with' => $request->header('X-Requested-With'),
+            'content_type' => $request->header('Content-Type'),
             'wants_json' => $request->wantsJson(),
             'expects_json' => $request->expectsJson(),
+        ]);
+
+        \Illuminate\Support\Facades\Log::info('[checkout_trace] AUTH_CHECK', [
             'user_id' => $request->user()?->id,
+        ]);
+
+        \Illuminate\Support\Facades\Log::info('[checkout_trace] VALIDATION_START', [
             'address_id' => $request->input('address_id'),
+            'courier_name' => $request->input('courier_name'),
+            'shipping_type' => $request->input('shipping_type'),
             'shipping_price' => $request->input('shipping_price'),
         ]);
 
-        $request->validate([
-            'address_id'        => 'required|integer',
-            'courier_name'      => 'required|string|max:100',
-            'courier_service'   => 'required|string|max:50',
-            'shipping_type'     => 'required|in:biteship,manual',
-            'shipping_price'    => 'required|integer|min:0', // used only for matching, not trusted for total
-            'notes'             => 'nullable|string|max:500',
-        ]);
+        try {
+            $request->validate([
+                'address_id'        => 'required|integer',
+                'courier_name'      => 'required|string|max:100',
+                'courier_service'   => 'required|string|max:50',
+                'shipping_type'     => 'required|in:biteship,manual',
+                'shipping_price'    => 'required|integer|min:0', 
+                'notes'             => 'nullable|string|max:500',
+            ]);
+            \Illuminate\Support\Facades\Log::info('[checkout_trace] VALIDATION_PASSED');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Illuminate\Support\Facades\Log::info('[checkout_trace] EXCEPTION', [
+                'class' => get_class($e),
+                'message' => $e->getMessage(),
+                'expects_json' => $request->expectsJson(),
+                'wants_json' => $request->wantsJson(),
+                'accept' => $request->header('Accept'),
+                'status' => $e->status,
+            ]);
+            throw $e;
+        }
 
         try {
             // 1. Verify address belongs to authenticated user
@@ -131,6 +153,12 @@ class CheckoutController extends Controller
             }
 
             $totalWeight = $cartData['items']->sum(fn($item) => ($item->product->weight ?? 500) * $item->quantity);
+
+            \Illuminate\Support\Facades\Log::info('[checkout_trace] SHIPPING_START', [
+                'province' => $address->province,
+                'city' => $address->city,
+                'total_weight' => $totalWeight,
+            ]);
 
             $serverRates = $this->shippingService->getRates(
                 $address->province,
@@ -158,7 +186,6 @@ class CheckoutController extends Controller
                 }
             }
 
-            // If courier/service combo not found but same type & price matches, allow (handles API variation)
             if (!$matchedRate) {
                 foreach ($serverRates as $rate) {
                     if ($rate['type'] === $request->shipping_type && $rate['price'] === (int) $request->shipping_price) {
@@ -172,7 +199,11 @@ class CheckoutController extends Controller
                 return $this->respondError($request, 'Opsi pengiriman yang dipilih tidak valid atau sudah tidak tersedia. Silakan pilih ulang.');
             }
 
-            // 4. Build address snapshot with SERVER-VALIDATED shipping cost
+            \Illuminate\Support\Facades\Log::info('[checkout_trace] SHIPPING_PASSED', [
+                'selected_rate' => $matchedRate['courier_name'],
+                'price' => $matchedRate['price'],
+            ]);
+
             $addressData = [
                 'recipient_name'  => $address->recipient_name,
                 'phone'           => $address->phone,
@@ -183,11 +214,10 @@ class CheckoutController extends Controller
                 'postal_code'     => $address->postal_code,
                 'detail_address'  => $address->detail_address,
                 'notes'           => $request->notes,
-                // Shipping snapshot - from SERVER-COMPUTED rate, not frontend
                 'courier_name'        => $matchedRate['courier_name'],
                 'courier_service'     => $matchedRate['courier_service'],
                 'shipping_type'       => $matchedRate['type'],
-                'shipping_cost'       => $matchedRate['price'], // SERVER-COMPUTED, tamper-proof
+                'shipping_cost'       => $matchedRate['price'], 
                 'origin_area_id'      => config('services.biteship.origin_area_id'),
                 'destination_area_id' => $address->biteship_area_id,
             ];
@@ -199,14 +229,25 @@ class CheckoutController extends Controller
                 'midtrans'
             );
 
+            \Illuminate\Support\Facades\Log::info('[checkout_trace] MIDTRANS_START');
+
             // 6. Create Midtrans payment with final SERVER-COMPUTED total
             $payment = $this->paymentService->createPayment($order);
+
+            \Illuminate\Support\Facades\Log::info('[checkout_trace] MIDTRANS_RESPONSE', [
+                'status' => 'success',
+                'has_redirect' => !empty($payment['redirect_url'])
+            ]);
 
             // 7. Clear cart after order is safely created
             $this->cartService->clearCart($request->user());
 
             // 8. Redirect to Midtrans Snap payment page
             $redirectUrl = !empty($payment['redirect_url']) ? $payment['redirect_url'] : route('customer.orders.show', $order->id);
+
+            \Illuminate\Support\Facades\Log::info('[checkout_trace] SUCCESS_RESPONSE', [
+                'redirect_url' => $redirectUrl
+            ]);
 
             if ($request->wantsJson()) {
                 return response()->json([
@@ -219,8 +260,22 @@ class CheckoutController extends Controller
             return redirect($redirectUrl)->with('success', 'Pesanan berhasil dibuat! Silakan selesaikan pembayaran Anda.');
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            \Illuminate\Support\Facades\Log::info('[checkout_trace] EXCEPTION', [
+                'class' => get_class($e),
+                'message' => $e->getMessage(),
+                'expects_json' => $request->expectsJson(),
+                'wants_json' => $request->wantsJson(),
+                'accept' => $request->header('Accept'),
+            ]);
             return $this->respondError($request, 'Alamat tidak ditemukan.');
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::info('[checkout_trace] EXCEPTION', [
+                'class' => get_class($e),
+                'message' => $e->getMessage(),
+                'expects_json' => $request->expectsJson(),
+                'wants_json' => $request->wantsJson(),
+                'accept' => $request->header('Accept'),
+            ]);
             \Illuminate\Support\Facades\Log::error('Checkout store error', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return $this->respondError($request, $e->getMessage());
         }

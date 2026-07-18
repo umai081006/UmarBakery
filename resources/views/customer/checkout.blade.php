@@ -22,19 +22,24 @@
             this.errorMessage = '';
 
             try {
-                let formData = new FormData();
-                formData.append('address_id', this.selectedAddressId);
-                formData.append('shipping_price', this.selectedShipping?.price || 0);
-                formData.append('courier_name', this.selectedShipping?.courier_name || '');
-                formData.append('courier_service', this.selectedShipping?.courier_service || '');
-                formData.append('shipping_type', this.selectedShipping?.type || '');
-                formData.append('notes', this.notes);
-                formData.append('_token', '{{ csrf_token() }}');
+                let payload = {
+                    address_id: this.selectedAddressId,
+                    shipping_price: this.selectedShipping?.price || 0,
+                    courier_name: this.selectedShipping?.courier_name || '',
+                    courier_service: this.selectedShipping?.courier_service || '',
+                    shipping_type: this.selectedShipping?.type || '',
+                    notes: this.notes
+                };
 
                 let res = await fetch('{{ route('checkout.store') }}', {
                     method: 'POST',
-                    headers: { 'Accept': 'application/json' },
-                    body: formData
+                    headers: { 
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify(payload)
                 });
 
                 let data = await res.json();

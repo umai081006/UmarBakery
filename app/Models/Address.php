@@ -20,6 +20,7 @@ class Address extends Model
         'city',
         'district',
         'postal_code',
+        'biteship_area_id',
         'detail_address',
         'delivery_zone_id',
         'is_default',

@@ -56,10 +56,13 @@ class CheckoutController extends Controller
         $shippingRates = [];
 
         if ($defaultAddress && $defaultAddress->province && $defaultAddress->city) {
-            // Calculate total weight for shipping API
-            $totalWeight = $cartData['items']->sum(function ($item) {
-                return ($item->product->weight ?? 500) * $item->quantity;
-            });
+            // Lazy-resolve Biteship area ID if not yet saved
+            if (empty($defaultAddress->biteship_area_id)) {
+                $this->shippingService->resolveAndSaveAreaId($defaultAddress);
+                $defaultAddress->refresh();
+            }
+
+            $totalWeight = $cartData['items']->sum(fn($item) => ($item->product->weight ?? 500) * $item->quantity);
 
             $shippingRates = $this->shippingService->getRates(
                 $defaultAddress->province,
@@ -67,6 +70,7 @@ class CheckoutController extends Controller
                 $defaultAddress->district ?? '',
                 (int) $totalWeight,
                 (int) $cartData['subtotal'],
+                $defaultAddress->biteship_area_id,
             );
         }
 
@@ -109,6 +113,12 @@ class CheckoutController extends Controller
                 return redirect()->route('cart.index')->with('error', 'Keranjang Anda kosong.');
             }
 
+            // Lazy-resolve Biteship area ID if not yet saved on this address
+            if (empty($address->biteship_area_id)) {
+                $this->shippingService->resolveAndSaveAreaId($address);
+                $address->refresh();
+            }
+
             $totalWeight = $cartData['items']->sum(fn($item) => ($item->product->weight ?? 500) * $item->quantity);
 
             $serverRates = $this->shippingService->getRates(
@@ -117,6 +127,7 @@ class CheckoutController extends Controller
                 $address->district ?? '',
                 (int) $totalWeight,
                 (int) $cartData['subtotal'],
+                $address->biteship_area_id,
             );
 
             if (empty($serverRates)) {
@@ -162,10 +173,12 @@ class CheckoutController extends Controller
                 'detail_address'  => $address->detail_address,
                 'notes'           => $request->notes,
                 // Shipping snapshot - from SERVER-COMPUTED rate, not frontend
-                'courier_name'    => $matchedRate['courier_name'],
-                'courier_service' => $matchedRate['courier_service'],
-                'shipping_type'   => $matchedRate['type'],
-                'shipping_cost'   => $matchedRate['price'], // SERVER-COMPUTED, tamper-proof
+                'courier_name'        => $matchedRate['courier_name'],
+                'courier_service'     => $matchedRate['courier_service'],
+                'shipping_type'       => $matchedRate['type'],
+                'shipping_cost'       => $matchedRate['price'], // SERVER-COMPUTED, tamper-proof
+                'origin_area_id'      => config('services.biteship.origin_area_id'),
+                'destination_area_id' => $address->biteship_area_id,
             ];
 
             // 5. Create order (stock validation + snapshot inside)
@@ -213,15 +226,19 @@ class CheckoutController extends Controller
         if (!$address->province || !$address->city) {
             return response()->json([
                 'available' => false,
-                'message' => 'Alamat ini belum memiliki informasi kota/provinsi. Silakan edit alamat terlebih dahulu.',
-                'rates' => [],
+                'message'   => 'Alamat ini belum memiliki informasi kota/provinsi. Silakan edit alamat terlebih dahulu.',
+                'rates'     => [],
             ]);
         }
 
-        $cartData = $this->cartService->getCartWithTotal($request->user());
-        $totalWeight = $cartData['items']->sum(function ($item) {
-            return ($item->product->weight ?? 500) * $item->quantity;
-        });
+        // Lazy-resolve Biteship area ID if not already stored
+        if (empty($address->biteship_area_id)) {
+            $this->shippingService->resolveAndSaveAreaId($address);
+            $address->refresh();
+        }
+
+        $cartData    = $this->cartService->getCartWithTotal($request->user());
+        $totalWeight = $cartData['items']->sum(fn($item) => ($item->product->weight ?? 500) * $item->quantity);
 
         $rates = $this->shippingService->getRates(
             $address->province,
@@ -229,6 +246,7 @@ class CheckoutController extends Controller
             $address->district ?? '',
             (int) $totalWeight,
             (int) $cartData['subtotal'],
+            $address->biteship_area_id,
         );
 
         if (empty($rates)) {

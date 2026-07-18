@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Address;
 use App\Models\DeliveryZone;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -10,10 +11,13 @@ use Illuminate\Support\Facades\Log;
 /**
  * Hybrid Shipping Service
  *
- * Priority order:
- * 1. BiteShip realtime API (if configured and returns rates)
- * 2. Admin Delivery Zone manual rate (if zone exists for the address)
- * 3. No shipping available → returns empty array
+ * Priority:
+ *  1. Biteship live rates (requires valid destination_area_id from Maps API)
+ *  2. Admin DeliveryZone manual rate
+ *  3. Returns empty array → checkout cannot proceed
+ *
+ * SECURITY: shipping costs are ALWAYS computed server-side.
+ * NEVER trust shipping_cost from the frontend form.
  */
 class ShippingService
 {
@@ -21,109 +25,164 @@ class ShippingService
     protected ?string $originAreaId;
     protected bool $apiEnabled;
 
+    private const BITESHIP_BASE = 'https://api.biteship.com/v1';
+    private const AREA_CACHE_HOURS = 24 * 7; // 7 days
+
     public function __construct()
     {
-        $this->apiKey = config('services.biteship.api_key') ?: null;
+        $this->apiKey       = config('services.biteship.api_key') ?: null;
         $this->originAreaId = config('services.biteship.origin_area_id') ?: null;
-        $this->apiEnabled = !empty($this->apiKey) && !empty($this->originAreaId);
+        $this->apiEnabled   = !empty($this->apiKey) && !empty($this->originAreaId);
     }
 
+    // =========================================================================
+    // PUBLIC API
+    // =========================================================================
+
     /**
-     * Get available shipping rates for a destination.
-     * Returns array of shipping options, or empty array if none available.
+     * Primary entry point: get shipping rates for a destination.
      *
-     * @param string $province
-     * @param string $city
-     * @param string $district
-     * @param int $totalWeightGrams
-     * @param int $orderValueIdr
+     * @param  string      $province
+     * @param  string      $city
+     * @param  string      $district
+     * @param  int         $totalWeightGrams
+     * @param  int         $orderValueIdr
+     * @param  string|null $biteshipAreaId    Pre-resolved area ID from addresses table
      * @return array
      */
-    public function getRates(string $province, string $city, string $district, int $totalWeightGrams, int $orderValueIdr): array
-    {
+    public function getRates(
+        string $province,
+        string $city,
+        string $district,
+        int $totalWeightGrams,
+        int $orderValueIdr,
+        ?string $biteshipAreaId = null
+    ): array {
         $rates = [];
 
-        // Level 1: Try BiteShip API
+        // STEP 1: Biteship live rates (requires valid area ID)
         if ($this->apiEnabled) {
-            try {
-                $rates = $this->getBiteshipeRates($province, $city, $district, $totalWeightGrams, $orderValueIdr);
-            } catch (\Throwable $e) {
-                Log::error('ShippingService::getRates BiteShip exception', ['error' => $e->getMessage()]);
-                $rates = [];
+            $destinationAreaId = $biteshipAreaId ?? $this->resolveAreaId($province, $city, $district);
+
+            if ($destinationAreaId) {
+                try {
+                    $rates = $this->fetchBiteshipRates($destinationAreaId, $totalWeightGrams, $orderValueIdr);
+                } catch (\Throwable $e) {
+                    Log::error('[shipping] Biteship rates exception', [
+                        'error'   => $e->getMessage(),
+                        'area_id' => $destinationAreaId,
+                    ]);
+                    $rates = [];
+                }
+            } else {
+                Log::info('[shipping] Biteship: could not resolve area ID, trying fallback', [
+                    'province' => $province,
+                    'city'     => $city,
+                    'district' => $district,
+                ]);
             }
         }
 
-        // Level 2: Fallback to Admin Delivery Zone
+        // STEP 2: Fallback to admin DeliveryZone
         if (empty($rates)) {
             $rates = $this->getZoneRates($province, $city, $district);
         }
 
         if (empty($rates)) {
-            Log::info('ShippingService: no rates available', compact('province', 'city', 'district'));
+            Log::info('[shipping] No rates available for destination', [
+                'province' => $province,
+                'city'     => $city,
+                'district' => $district,
+            ]);
         }
 
         return $rates;
     }
 
     /**
-     * Get rates by Biteship area ID directly (when stored on address).
+     * Get rates directly by Biteship area ID (used when area ID is already stored).
      */
     public function getRatesByAreaId(string $destinationAreaId, int $totalWeightGrams, int $orderValueIdr): array
     {
         if (!$this->apiEnabled) {
             return [];
         }
-
-        try {
-            $response = Http::withToken($this->apiKey)
-                ->timeout(15)
-                ->post('https://api.biteship.com/v1/rates/couriers', [
-                    'origin_area_id'      => $this->originAreaId,
-                    'destination_area_id' => $destinationAreaId,
-                    'items' => [
-                        [
-                            'name'        => 'Umar Bakery Order',
-                            'description' => 'Produk roti dan kue',
-                            'value'       => $orderValueIdr,
-                            'length'      => 30,
-                            'width'       => 20,
-                            'height'      => 15,
-                            'weight'      => max($totalWeightGrams, 1),
-                        ],
-                    ],
-                ]);
-
-            if (!$response->successful()) {
-                Log::warning('BiteShip getRatesByAreaId failed', ['status' => $response->status()]);
-                return [];
-            }
-
-            $pricings = $response->json('pricing', []);
-            $rates = [];
-            foreach ($pricings as $pricing) {
-                if (empty($pricing['price']) || $pricing['price'] <= 0) continue;
-                $rates[] = [
-                    'type'              => 'biteship',
-                    'courier_name'      => $pricing['courier_name'] ?? $pricing['courier_code'] ?? 'Kurir',
-                    'courier_service'   => $pricing['courier_service_code'] ?? 'REG',
-                    'service_type'      => $pricing['type'] ?? 'reguler',
-                    'price'             => (int) $pricing['price'],
-                    'price_formatted'   => 'Rp ' . number_format($pricing['price'], 0, ',', '.'),
-                    'estimated_delivery' => $pricing['shipment_duration_range'] ?? '1-3 hari',
-                    'zone_id'           => null,
-                ];
-            }
-            usort($rates, fn ($a, $b) => $a['price'] <=> $b['price']);
-            return $rates;
-        } catch (\Throwable $e) {
-            Log::error('ShippingService::getRatesByAreaId exception', ['error' => $e->getMessage()]);
-            return [];
-        }
+        return $this->fetchBiteshipRates($destinationAreaId, $totalWeightGrams, $orderValueIdr);
     }
 
     /**
-     * Get area ID from BiteShip for a location.
-     * Results cached 24 hours to reduce API calls.
+     * Resolve a Biteship area ID from province/city/district text.
+     * Tries multiple query formats for best match.
+     * Caches results to reduce API calls.
+     *
+     * @return string|null
+     */
+    public function resolveAreaId(string $province, string $city, string $district): ?string
+    {
+        if (!$this->apiEnabled) {
+            return null;
+        }
+
+        // Try district-level first (most accurate)
+        if ($district) {
+            $areaId = $this->searchSingleAreaId("{$district}, {$city}, {$province}");
+            if ($areaId) return $areaId;
+
+            // Try without province
+            $areaId = $this->searchSingleAreaId("{$district}, {$city}");
+            if ($areaId) return $areaId;
+        }
+
+        // Try city-level
+        $areaId = $this->searchSingleAreaId("{$city}, {$province}");
+        if ($areaId) return $areaId;
+
+        return null;
+    }
+
+    /**
+     * Resolve area ID and optionally persist it to an Address model.
+     * Safe to call at address save time or lazily at checkout.
+     */
+    public function resolveAndSaveAreaId(Address $address): ?string
+    {
+        if (!$this->apiEnabled) {
+            return null;
+        }
+
+        // Already resolved
+        if (!empty($address->biteship_area_id)) {
+            return $address->biteship_area_id;
+        }
+
+        $areaId = $this->resolveAreaId(
+            $address->province ?? '',
+            $address->city ?? '',
+            $address->district ?? ''
+        );
+
+        if ($areaId) {
+            $address->biteship_area_id = $areaId;
+            $address->saveQuietly(); // no events, just persist
+            Log::info('[shipping] Biteship area ID resolved and saved', [
+                'address_id' => $address->id,
+                'area_id'    => $areaId,
+            ]);
+        } else {
+            Log::warning('[shipping] Biteship area ID could not be resolved for address', [
+                'address_id' => $address->id,
+                'province'   => $address->province,
+                'city'       => $address->city,
+                'district'   => $address->district,
+            ]);
+        }
+
+        return $areaId;
+    }
+
+    /**
+     * Search Biteship Maps API and return first matching area ID.
+     * Caches result per query string.
      */
     public function searchAreas(string $query): array
     {
@@ -131,35 +190,126 @@ class ShippingService
             return [];
         }
 
-        $cacheKey = 'biteship_areas_' . md5($query);
+        $cacheKey = 'biteship_area_search_' . md5($query);
 
-        return Cache::remember($cacheKey, 86400, function () use ($query) {
+        return Cache::remember($cacheKey, self::AREA_CACHE_HOURS * 3600, function () use ($query) {
             try {
                 $response = Http::withToken($this->apiKey)
                     ->timeout(10)
-                    ->get('https://api.biteship.com/v1/maps/areas', [
+                    ->get(self::BITESHIP_BASE . '/maps/areas', [
                         'countries' => 'ID',
-                        'input' => $query,
-                        'type' => 'single',
+                        'input'     => $query,
+                        'type'      => 'single',
                     ]);
 
                 if ($response->successful()) {
                     return $response->json('areas', []);
                 }
 
-                Log::warning('BiteShip area search failed', ['status' => $response->status(), 'query' => $query]);
+                Log::warning('[shipping] Biteship Maps API non-success', [
+                    'status'   => $response->status(),
+                    'query'    => $query,
+                    'response' => $response->json(),
+                ]);
                 return [];
-            } catch (\Exception $e) {
-                Log::error('BiteShip area search exception', ['message' => $e->getMessage()]);
+            } catch (\Throwable $e) {
+                Log::error('[shipping] Biteship Maps API exception', [
+                    'query' => $query,
+                    'error' => $e->getMessage(),
+                ]);
                 return [];
             }
         });
     }
 
+    // =========================================================================
+    // PRIVATE HELPERS
+    // =========================================================================
+
     /**
-     * Get admin-defined delivery zone options.
+     * Perform Maps API search and return first area ID, or null.
      */
-    protected function getZoneRates(string $province, string $city, string $district): array
+    private function searchSingleAreaId(string $query): ?string
+    {
+        $areas = $this->searchAreas($query);
+        if (!empty($areas[0]['id'])) {
+            return $areas[0]['id'];
+        }
+        return null;
+    }
+
+    /**
+     * Call Biteship Rates API and return normalized rate array.
+     */
+    private function fetchBiteshipRates(string $destinationAreaId, int $weightGrams, int $orderValue): array
+    {
+        $payload = [
+            'origin_area_id'      => $this->originAreaId,
+            'destination_area_id' => $destinationAreaId,
+            'items'               => [
+                [
+                    'name'        => 'Umar Bakery Order',
+                    'description' => 'Produk roti dan kue',
+                    'value'       => max($orderValue, 1),
+                    'length'      => 30,
+                    'width'       => 20,
+                    'height'      => 15,
+                    'weight'      => max($weightGrams, 1),
+                ],
+            ],
+        ];
+
+        $response = Http::withToken($this->apiKey)
+            ->timeout(20)
+            ->post(self::BITESHIP_BASE . '/rates/couriers', $payload);
+
+        if (!$response->successful()) {
+            // Log full detail (no API key exposed)
+            Log::error('[shipping] Biteship Rates API failed', [
+                'endpoint'             => self::BITESHIP_BASE . '/rates/couriers',
+                'http_status'          => $response->status(),
+                'origin_area_id'       => $this->originAreaId,
+                'destination_area_id'  => $destinationAreaId,
+                'weight_grams'         => $weightGrams,
+                'response_body'        => $response->json(),
+            ]);
+            return [];
+        }
+
+        $pricings = $response->json('pricing', []);
+        $rates    = [];
+
+        foreach ($pricings as $pricing) {
+            $price = (int) ($pricing['price'] ?? 0);
+            if ($price <= 0) continue;
+
+            $rates[] = [
+                'type'               => 'biteship',
+                'courier_name'       => $pricing['courier_name'] ?? ($pricing['courier_code'] ?? 'Kurir'),
+                'courier_service'    => $pricing['courier_service_code'] ?? 'REG',
+                'courier_service_name' => $pricing['courier_service_name'] ?? ($pricing['courier_service_code'] ?? 'Reguler'),
+                'service_type'       => $pricing['type'] ?? 'reguler',
+                'price'              => $price,
+                'price_formatted'    => 'Rp ' . number_format($price, 0, ',', '.'),
+                'estimated_delivery' => $pricing['shipment_duration_range'] ?? ($pricing['shipment_duration_unit'] ?? '1-3 hari'),
+                'zone_id'            => null,
+            ];
+        }
+
+        usort($rates, fn($a, $b) => $a['price'] <=> $b['price']);
+
+        Log::info('[shipping] Biteship Rates API success', [
+            'destination_area_id' => $destinationAreaId,
+            'rate_count'          => count($rates),
+        ]);
+
+        return $rates;
+    }
+
+    /**
+     * Get admin-defined manual shipping rate from DeliveryZone.
+     */
+    private function getZoneRates(string $province, string $city, string $district): array
     {
         $zone = DeliveryZone::findFor($province, $city, $district);
 
@@ -169,115 +319,16 @@ class ShippingService
 
         return [
             [
-                'type' => 'manual',
-                'courier_name' => 'Pengiriman Lokal',
-                'courier_service' => 'REGULER',
-                'service_type' => 'reguler',
-                'price' => $zone->manual_shipping_cost,
-                'price_formatted' => 'Rp ' . number_format($zone->manual_shipping_cost, 0, ',', '.'),
+                'type'               => 'manual',
+                'courier_name'       => 'Pengiriman Lokal',
+                'courier_service'    => 'REGULER',
+                'courier_service_name' => 'Reguler',
+                'service_type'       => 'reguler',
+                'price'              => $zone->manual_shipping_cost,
+                'price_formatted'    => 'Rp ' . number_format($zone->manual_shipping_cost, 0, ',', '.'),
                 'estimated_delivery' => $zone->estimated_delivery ?? '1-3 hari',
-                'zone_id' => $zone->id,
+                'zone_id'            => $zone->id,
             ],
         ];
-    }
-
-    /**
-     * Get realtime rates from BiteShip API.
-     */
-    protected function getBiteshipeRates(string $province, string $city, string $district, int $weightGrams, int $orderValue): array
-    {
-        if (!$this->apiEnabled) {
-            return [];
-        }
-
-        // First, resolve destination area ID
-        $destinationAreaId = $this->resolveAreaId($province, $city, $district);
-
-        if (!$destinationAreaId) {
-            Log::info('BiteShip: could not resolve area ID', compact('province', 'city', 'district'));
-            return [];
-        }
-
-        try {
-            $response = Http::withToken($this->apiKey)
-                ->timeout(15)
-                ->post('https://api.biteship.com/v1/rates/couriers', [
-                    'origin_area_id' => $this->originAreaId,
-                    'destination_area_id' => $destinationAreaId,
-                    'items' => [
-                        [
-                            'name' => 'Umar Bakery Order',
-                            'description' => 'Produk roti dan kue',
-                            'value' => $orderValue,
-                            'length' => 30,
-                            'width' => 20,
-                            'height' => 15,
-                            'weight' => max($weightGrams, 1),
-                        ],
-                    ],
-                ]);
-
-            if (!$response->successful()) {
-                Log::warning('BiteShip rates failed', ['status' => $response->status()]);
-                return [];
-            }
-
-            $pricings = $response->json('pricing', []);
-
-            $rates = [];
-            foreach ($pricings as $pricing) {
-                if (empty($pricing['price']) || $pricing['price'] <= 0) continue;
-
-                $rates[] = [
-                    'type' => 'biteship',
-                    'courier_name' => $pricing['courier_name'] ?? $pricing['courier_code'] ?? 'Kurir',
-                    'courier_service' => $pricing['courier_service_code'] ?? 'REG',
-                    'service_type' => $pricing['type'] ?? 'reguler',
-                    'price' => (int) $pricing['price'],
-                    'price_formatted' => 'Rp ' . number_format($pricing['price'], 0, ',', '.'),
-                    'estimated_delivery' => $pricing['shipment_duration_range'] ?? '1-3 hari',
-                    'zone_id' => null,
-                ];
-            }
-
-            // Sort by price ascending
-            usort($rates, fn ($a, $b) => $a['price'] <=> $b['price']);
-
-            return $rates;
-        } catch (\Exception $e) {
-            Log::error('BiteShip rates exception', ['message' => $e->getMessage()]);
-            return [];
-        }
-    }
-
-    /**
-     * Resolve BiteShip area ID from province/city/district.
-     * Tries district+city first, then city only.
-     */
-    protected function resolveAreaId(string $province, string $city, string $district): ?string
-    {
-        // Check if the delivery zone has a pre-saved area ID
-        $zone = DeliveryZone::findFor($province, $city, $district);
-        if ($zone && $zone->biteship_area_id) {
-            return $zone->biteship_area_id;
-        }
-
-        // Search BiteShip API for area
-        $searchQuery = trim("$district $city");
-        $areas = $this->searchAreas($searchQuery);
-
-        foreach ($areas as $area) {
-            if (!empty($area['id'])) {
-                // Optionally save to zone for future use
-                if ($zone) {
-                    $zone->update(['biteship_area_id' => $area['id']]);
-                }
-                return $area['id'];
-            }
-        }
-
-        // Try city-only as last resort
-        $cityAreas = $this->searchAreas($city);
-        return $cityAreas[0]['id'] ?? null;
     }
 }

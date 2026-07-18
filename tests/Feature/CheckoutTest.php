@@ -13,7 +13,15 @@ class CheckoutTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_checkout_validation_returns_json()
+    {
+        $user = User::factory()->create(['email_verified_at' => now()]);
 
+        $response = $this->actingAs($user)
+            ->postJson(route('checkout.store'), []);
+
+        $this->assertEquals(422, $response->getStatusCode(), "Actual status: " . $response->getStatusCode() . " Content: " . $response->getContent());
+    }
 
     public function test_checkout_shipping_rates_uses_dynamic_address()
     {
@@ -41,9 +49,6 @@ class CheckoutTest extends TestCase
             ->getJson(route('checkout.shipping_rates', ['address_id' => $address->id]));
 
         $response->assertStatus(200);
-        
-        // As long as it doesn't crash and returns valid JSON structure for rates, it works.
-        // It should either return available => true or available => false depending on API key existence in test env.
         $response->assertJsonStructure(['available', 'message', 'rates']);
     }
 

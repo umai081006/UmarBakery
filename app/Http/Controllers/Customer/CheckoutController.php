@@ -88,6 +88,17 @@ class CheckoutController extends Controller
      */
     public function store(Request $request)
     {
+        \Illuminate\Support\Facades\Log::info('[checkout_debug] POST /checkout hit', [
+            'method' => $request->method(),
+            'accept_header' => $request->header('Accept'),
+            'x_requested_with' => $request->header('X-Requested-With'),
+            'wants_json' => $request->wantsJson(),
+            'expects_json' => $request->expectsJson(),
+            'user_id' => $request->user()?->id,
+            'address_id' => $request->input('address_id'),
+            'shipping_price' => $request->input('shipping_price'),
+        ]);
+
         $request->validate([
             'address_id'        => 'required|integer',
             'courier_name'      => 'required|string|max:100',

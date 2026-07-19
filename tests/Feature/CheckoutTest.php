@@ -120,4 +120,69 @@ class CheckoutTest extends TestCase
 
         $lock->release(); // Clean up
     }
+
+    public function test_successful_checkout_returns_json_with_redirect_url()
+    {
+        $user = User::factory()->create(['email_verified_at' => now()]);
+        
+        $address = Address::create([
+            'user_id' => $user->id,
+            'recipient_name' => 'Test User',
+            'phone' => '08123456789',
+            'address' => 'Test Address',
+            'province' => 'Jawa Barat',
+            'city' => 'Kota Depok',
+            'district' => 'Tapos',
+            'postal_code' => '16458',
+            'biteship_area_id' => 'IDNP9IDNC111IDND272IDZ16458',
+        ]);
+        
+        $product = Product::factory()->create(['price' => 10000]);
+        Cart::create([
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'quantity' => 1,
+        ]);
+
+        // Mock Shipping Service
+        $this->mock(\App\Services\ShippingService::class, function ($mock) {
+            $mock->shouldReceive('getRates')->andReturn([
+                [
+                    'courier_name' => 'JNE',
+                    'courier_service' => 'REG',
+                    'type' => 'biteship',
+                    'price' => 10000,
+                    'estimated_delivery' => '1-2 days'
+                ]
+            ]);
+        });
+
+        // Mock Payment Service
+        $this->mock(\App\Services\Payments\PaymentService::class, function ($mock) {
+            $mock->shouldReceive('createPayment')->andReturn([
+                'status' => 'pending',
+                'redirect_url' => 'https://app.midtrans.com/snap/v4/redirection/fake-token',
+                'transaction_id' => 'fake-transaction-id'
+            ]);
+        });
+
+        $response = $this->actingAs($user)
+            ->postJson(route('checkout.store'), [
+                'address_id' => $address->id,
+                'courier_name' => 'JNE',
+                'courier_service' => 'REG',
+                'shipping_type' => 'biteship',
+                'shipping_price' => 10000,
+            ], [
+                'Accept' => 'application/json',
+                'X-Requested-With' => 'XMLHttpRequest',
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'redirect_url' => 'https://app.midtrans.com/snap/v4/redirection/fake-token',
+                'message' => 'Pesanan berhasil dibuat! Silakan selesaikan pembayaran Anda.'
+            ]);
+    }
 }

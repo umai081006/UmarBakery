@@ -1,109 +1,112 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="bg-cream py-12" x-data="{ 
-        isSubmitting: false,
-        selectedAddressId: {{ $defaultAddressId ?? 'null' }},
-        shippingRates: @js($shippingRates ?? []),
-        isLoadingRates: false,
-        selectedShipping: null,
-        subtotal: {{ $subtotal }},
-        discount_amount: {{ $discount_amount ?? 0 }},
-        errorMessage: '',
-        notes: '',
-        
-        get total() {
-            return (this.subtotal - this.discount_amount) + (this.selectedShipping ? this.selectedShipping.price : 0);
-        },
 
-        async submitCheckout() {
-            if (this.isSubmitting) return;
-            this.isSubmitting = true;
-            this.errorMessage = '';
+{{-- Pass server-side data to Alpine component via a script block --}}
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('checkoutComponent', () => ({
+            isSubmitting: false,
+            selectedAddressId: {{ $defaultAddressId ?? 'null' }},
+            shippingRates: {!! json_encode($shippingRates ?? []) !!},
+            isLoadingRates: false,
+            selectedShipping: null,
+            subtotal: {{ $subtotal }},
+            discount_amount: {{ $discount_amount ?? 0 }},
+            errorMessage: '',
+            notes: '',
 
-            try {
-                let payload = {
-                    address_id: this.selectedAddressId,
-                    shipping_price: this.selectedShipping?.price || 0,
-                    courier_name: this.selectedShipping?.courier_name || '',
-                    courier_service: this.selectedShipping?.courier_service || '',
-                    shipping_type: this.selectedShipping?.type || '',
-                    notes: this.notes
-                };
+            get total() {
+                return (this.subtotal - this.discount_amount) + (this.selectedShipping ? this.selectedShipping.price : 0);
+            },
 
-                let res = await fetch('{{ route('checkout.store') }}', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: { 
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify(payload)
-                });
+            init() {
+                if (this.shippingRates.length > 0) {
+                    this.selectedShipping = this.shippingRates[0];
+                }
+            },
 
-                let data;
+            async submitCheckout() {
+                if (this.isSubmitting) return;
+                this.isSubmitting = true;
+                this.errorMessage = '';
+
                 try {
-                    data = await res.json();
-                } catch (jsonErr) {
-                    // Response was not JSON (e.g. 302 redirect HTML page) — server error
-                    console.error('[checkout] Non-JSON response:', res.status, res.url);
-                    this.errorMessage = 'Respons server tidak valid (status ' + res.status + '). Silakan coba lagi atau hubungi support.';
-                    this.isSubmitting = false;
-                    return;
-                }
+                    let payload = {
+                        address_id: this.selectedAddressId,
+                        shipping_price: this.selectedShipping?.price || 0,
+                        courier_name: this.selectedShipping?.courier_name || '',
+                        courier_service: this.selectedShipping?.courier_service || '',
+                        shipping_type: this.selectedShipping?.type || '',
+                        notes: this.notes
+                    };
 
-                if (res.ok && data.success) {
-                    window.location.href = data.redirect_url;
-                } else {
-                    this.errorMessage = data.message || 'Gagal memproses pesanan (status ' + res.status + '). Silakan coba lagi.';
+                    let res = await fetch('{{ route('checkout.store') }}', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    let data;
+                    try {
+                        data = await res.json();
+                    } catch (jsonErr) {
+                        console.error('[checkout] Non-JSON response:', res.status, res.url);
+                        this.errorMessage = 'Respons server tidak valid (status ' + res.status + '). Silakan coba lagi atau hubungi support.';
+                        this.isSubmitting = false;
+                        return;
+                    }
+
+                    if (res.ok && data.success) {
+                        window.location.href = data.redirect_url;
+                    } else {
+                        this.errorMessage = data.message || 'Gagal memproses pesanan (status ' + res.status + '). Silakan coba lagi.';
+                        this.isSubmitting = false;
+                    }
+                } catch (e) {
+                    console.error('[checkout] Fetch error:', e);
+                    this.errorMessage = 'Terjadi kesalahan jaringan atau server. Silakan coba lagi.';
                     this.isSubmitting = false;
                 }
-            } catch (e) {
-                console.error('[checkout] Fetch error:', e);
-                this.errorMessage = 'Terjadi kesalahan jaringan atau server. Silakan coba lagi.';
-                this.isSubmitting = false;
-            }
-        },
-        
-        async fetchRates(addressId) {
-            this.selectedAddressId = addressId;
-            this.shippingRates = [];
-            this.selectedShipping = null;
-            this.isLoadingRates = true;
-            
-            try {
-                let formData = new FormData();
-                formData.append('address_id', addressId);
-                formData.append('_token', '{{ csrf_token() }}');
-                
-                let res = await fetch('{{ route('checkout.shipping_rates') }}?address_id=' + addressId, {
-                    headers: { 'Accept': 'application/json' }
-                });
-                
-                let data = await res.json();
-                if (data.available) {
-                    this.shippingRates = data.rates;
-                    if(this.shippingRates.length > 0) {
-                        this.selectedShipping = this.shippingRates[0];
+            },
+
+            async fetchRates(addressId) {
+                this.selectedAddressId = addressId;
+                this.shippingRates = [];
+                this.selectedShipping = null;
+                this.isLoadingRates = true;
+
+                try {
+                    let res = await fetch('{{ route('checkout.shipping_rates') }}?address_id=' + addressId, {
+                        headers: { 'Accept': 'application/json' }
+                    });
+
+                    let data = await res.json();
+                    if (data.available) {
+                        this.shippingRates = data.rates;
+                        if (this.shippingRates.length > 0) {
+                            this.selectedShipping = this.shippingRates[0];
+                        }
+                    } else {
+                        alert(data.message || 'Pengiriman tidak tersedia untuk alamat ini.');
                     }
-                } else {
-                    alert(data.message || 'Pengiriman tidak tersedia untuk alamat ini.');
+                } catch (e) {
+                    alert('Gagal mengambil data ongkir. Silakan coba lagi.');
+                } finally {
+                    this.isLoadingRates = false;
                 }
-            } catch (e) {
-                alert('Gagal mengambil data ongkir. Silakan coba lagi.');
-            } finally {
-                this.isLoadingRates = false;
             }
-        },
-        
-        init() {
-            if(this.shippingRates.length > 0) {
-                this.selectedShipping = this.shippingRates[0];
-            }
-        }
-    }">
+        }));
+    });
+</script>
+
+<div class="bg-cream py-12" x-data="checkoutComponent">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         <h1 class="text-3xl font-serif text-cocoa mb-10 tracking-tight">Checkout</h1>
@@ -241,7 +244,7 @@
 
                     <button type="submit" :disabled="isSubmitting || !selectedShipping || shippingRates.length === 0" 
                         class="w-full flex items-center justify-center gap-2 bg-cocoa hover:bg-caramel text-white font-mono font-semibold py-5 rounded-full shadow-soft hover:shadow-float transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <span x-show="!isSubmitting">Buat Pesanan & Bayar</span>
+                        <span x-show="!isSubmitting">Buat Pesanan &amp; Bayar</span>
                         <span x-show="isSubmitting">Memproses...</span>
                     </button>
                     

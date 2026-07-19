@@ -185,4 +185,40 @@ class CheckoutTest extends TestCase
                 'message' => 'Pesanan berhasil dibuat! Silakan selesaikan pembayaran Anda.'
             ]);
     }
+
+    public function test_checkout_page_renders_successfully()
+    {
+        $user = User::factory()->create(['email_verified_at' => now()]);
+
+        $address = Address::create([
+            'user_id' => $user->id,
+            'recipient_name' => 'Test User',
+            'phone' => '08123456789',
+            'address' => 'Test Address',
+            'province' => 'Jawa Barat',
+            'city' => 'Kota Depok',
+            'district' => 'Tapos',
+            'postal_code' => '16458',
+        ]);
+
+        $product = Product::factory()->create(['price' => 10000, 'is_active' => true]);
+        Cart::create([
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'quantity' => 1,
+        ]);
+
+        // Mock ShippingService so the GET doesn't call Biteship API
+        $this->mock(\App\Services\ShippingService::class, function ($mock) {
+            $mock->shouldReceive('resolveAndSaveAreaId')->andReturn(null);
+            $mock->shouldReceive('getRates')->andReturn([]);
+        });
+
+        $response = $this->actingAs($user)->get(route('checkout.index'));
+
+        $response->assertStatus(200);
+        $response->assertSee('Checkout');
+        $response->assertSee('Buat Pesanan');
+        $response->assertSee('submitCheckout');
+    }
 }

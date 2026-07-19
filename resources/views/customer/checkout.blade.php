@@ -209,7 +209,7 @@
                 </div>
 
                 <!-- Checkout Form -->
-                <form method="POST" action="{{ route('checkout.store') }}" @submit="isSubmitting = true" class="bg-white rounded-4xl p-8 shadow-soft relative overflow-hidden">
+                <form method="POST" action="{{ route('checkout.store') }}" @submit.prevent="submitCheckout" class="bg-white rounded-4xl p-8 shadow-soft relative overflow-hidden">
                     @csrf
                     
                     <!-- Hidden inputs for final payload -->

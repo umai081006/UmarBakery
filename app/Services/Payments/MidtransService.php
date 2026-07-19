@@ -90,10 +90,6 @@ class MidtransService implements PaymentService
                 'phone' => mb_substr($order->phone ?? '', 0, 255),
             ],
             'item_details' => $items,
-            'custom_expiry' => [
-                'expiry_duration' => 60,
-                'unit' => 'minute'
-            ]
         ];
     }
 
@@ -111,7 +107,6 @@ class MidtransService implements PaymentService
             'transaction_id' => $order->order_number,
             'snap_token' => $response['token'],
             'snap_redirect_url' => $response['redirect_url'],
-            'expires_at' => now()->addMinutes(60),
             'raw_response' => $response,
         ]);
     }
@@ -155,45 +150,32 @@ class MidtransService implements PaymentService
             $status = 'pending';
         }
 
-        // Update Payment Record with Row Lock for Idempotency
-        \Illuminate\Support\Facades\DB::transaction(function () use ($orderId, $status, $payload, $grossAmount) {
-            $payment = Payment::with('order')->where('transaction_id', $orderId)->lockForUpdate()->first();
-            
-            if (!$payment) {
-                throw new Exception("Payment not found for Order ID: " . $orderId);
-            }
+        // Update Payment Record
+        $payment = Payment::with('order')->where('transaction_id', $orderId)->first();
+        
+        if (!$payment) {
+            throw new Exception("Payment not found for Order ID: " . $orderId);
+        }
 
-            // Verify Gross Amount to prevent manipulation
-            if ((float)$payment->amount !== (float)$grossAmount) {
-                throw new Exception("Gross amount mismatch.");
-            }
+        // Webhook Hardening: Prevent overriding final states
+        if ($payment->order && in_array($payment->order->status, ['completed', 'cancelled'])) {
+            \Illuminate\Support\Facades\Log::info('Webhook ignored - order in final state', ['order_id' => $payment->order->id]);
+            return;
+        }
 
-            // Webhook Hardening: Prevent overriding final states
-            if ($payment->order && in_array($payment->order->status, ['completed', 'cancelled'])) {
-                \Illuminate\Support\Facades\Log::info('Webhook ignored - order in final state', ['order_id' => $payment->order->id]);
-                return;
-            }
+        $payment->status = $status;
+        $payment->raw_response = $payload;
+        if ($status === 'paid' && !$payment->paid_at) {
+            $payment->paid_at = now();
+        }
+        $payment->save();
 
-            // Webhook Idempotency: Ignore if status is already achieved
-            if ($payment->status === $status) {
-                \Illuminate\Support\Facades\Log::info('Webhook ignored - payment already in target status', ['order_id' => $payment->order->id, 'status' => $status]);
-                return;
-            }
-
-            $payment->status = $status;
-            $payment->raw_response = $payload;
-            if ($status === 'paid' && !$payment->paid_at) {
-                $payment->paid_at = now();
-            }
-            $payment->save();
-
-            // Dispatch Event for Decoupling
-            if ($status === 'paid' && $payment->order) {
-                event(new \App\Events\PaymentPaid($payment->order, $payment));
-            } elseif ($status === 'failed' && $payment->order) {
-                event(new \App\Events\PaymentFailed($payment->order));
-            }
-        });
+        // Dispatch Event for Decoupling
+        if ($status === 'paid' && $payment->order) {
+            event(new \App\Events\PaymentPaid($payment->order, $payment));
+        } elseif ($status === 'failed' && $payment->order) {
+            event(new \App\Events\PaymentFailed($payment->order));
+        }
     }
 
     /**

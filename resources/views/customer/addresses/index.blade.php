@@ -148,7 +148,10 @@
             
             <form :action="formAction" method="POST" class="flex flex-col overflow-y-auto custom-scrollbar">
                 @csrf
-                <input type="hidden" name="_method" x-bind:value="isEdit ? 'PUT' : 'POST'">
+                <template x-if="isEdit">
+                    <input type="hidden" name="_method" value="PUT">
+                </template>
+                
                 <div class="p-8 space-y-5">
                     <div>
                         <label class="block text-xs font-mono font-semibold text-cocoa uppercase tracking-widest mb-2">Label Alamat</label>

@@ -234,47 +234,10 @@
             </div>
 
             <!-- Payment Section -->
-            @php
-                $payment = \App\Models\Payment::where('order_id', $order->id)->latest()->first();
-            @endphp
-
-            @if($order->status === 'paid' && $payment)
-                <div class="bg-white rounded-4xl border border-dough/30 p-8 shadow-soft space-y-4">
-                    <h3 class="font-mono text-xs font-semibold text-cocoa uppercase tracking-widest border-b border-dough/30 pb-4 mb-4 flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        Pembayaran Berhasil Diverifikasi
-                    </h3>
-                    
-                    <div class="grid grid-cols-2 gap-4 text-sm font-sans text-cocoa/80">
-                        <div>
-                            <span class="block text-xs font-mono uppercase tracking-widest text-cocoa/50 mb-1">Status</span>
-                            <span class="font-bold text-green-600 uppercase">{{ $payment->status }}</span>
-                        </div>
-                        <div>
-                            <span class="block text-xs font-mono uppercase tracking-widest text-cocoa/50 mb-1">Provider</span>
-                            <span class="font-semibold uppercase">{{ $payment->provider }}</span>
-                        </div>
-                        <div class="col-span-2">
-                            <span class="block text-xs font-mono uppercase tracking-widest text-cocoa/50 mb-1">Transaction ID</span>
-                            <span class="font-mono text-xs bg-cream px-2 py-1 rounded">{{ $payment->transaction_id }}</span>
-                        </div>
-                        <div>
-                            <span class="block text-xs font-mono uppercase tracking-widest text-cocoa/50 mb-1">Tipe Pembayaran</span>
-                            <span class="font-semibold">{{ $payment->raw_response['payment_type'] ?? 'N/A' }}</span>
-                        </div>
-                        <div>
-                            <span class="block text-xs font-mono uppercase tracking-widest text-cocoa/50 mb-1">Jumlah Dibayar</span>
-                            <span class="font-bold text-caramel">Rp {{ number_format($payment->amount, 0, ',', '.') }}</span>
-                        </div>
-                        <div class="col-span-2 border-t border-dough/30 pt-4 mt-2">
-                            <span class="block text-xs font-mono uppercase tracking-widest text-cocoa/50 mb-1">Waktu Dibayar (Paid At)</span>
-                            <span class="font-semibold">{{ $payment->paid_at ? $payment->paid_at->format('d M Y, H:i:s') : 'N/A' }}</span>
-                        </div>
-                    </div>
-                </div>
-            @endif
-
             @if($order->status === 'pending')
+                @php
+                    $payment = \App\Models\Payment::where('order_id', $order->id)->latest()->first();
+                @endphp
                 @if($payment && $payment->provider === 'midtrans' && $payment->snap_token)
                     <div class="bg-white rounded-4xl border border-dough/30 p-8 shadow-soft text-center">
                         <h3 class="font-mono text-xs font-semibold text-cocoa uppercase tracking-widest border-b border-dough/30 pb-4 mb-6">Selesaikan Pembayaran</h3>

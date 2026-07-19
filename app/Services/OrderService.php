@@ -155,22 +155,9 @@ class OrderService
 
             $lockedOrder->update($updateData);
 
-            \Illuminate\Support\Facades\Log::info('Order Status Transition', [
-                'order_id' => $lockedOrder->id,
-                'order_number' => $lockedOrder->order_number,
-                'from_status' => $currentStatus,
-                'to_status' => $newStatus,
-            ]);
-
-            // If transitioned to cancelled, restore stock and cancel payment
+            // If transitioned to cancelled, restore stock
             if ($newStatus === 'cancelled') {
                 $this->restoreStock($lockedOrder);
-                
-                // Cancel pending payment if exists
-                $payment = \App\Models\Payment::where('order_id', $lockedOrder->id)->where('status', 'pending')->first();
-                if ($payment) {
-                    $payment->update(['status' => 'cancelled']);
-                }
             }
 
             return $lockedOrder;

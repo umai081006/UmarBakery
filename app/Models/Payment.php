@@ -21,14 +21,12 @@ class Payment extends Model
         'snap_token',
         'snap_redirect_url',
         'paid_at',
-        'expires_at',
         'raw_response',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'paid_at' => 'datetime',
-        'expires_at' => 'datetime',
         'raw_response' => 'array',
     ];
 

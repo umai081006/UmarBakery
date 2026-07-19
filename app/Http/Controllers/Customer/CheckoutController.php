@@ -43,21 +43,6 @@ class CheckoutController extends Controller
             return redirect()->route('cart.index')->with('error', 'Keranjang belanja Anda kosong.');
         }
 
-        // Check for active pending payment (Phase 3: Active Pending Order UX)
-        $activePendingOrder = \App\Models\Order::where('user_id', $request->user()->id)
-            ->where('status', 'pending')
-            ->whereHas('payment', function($q) {
-                $q->where('status', 'pending')
-                  ->where('expires_at', '>', now());
-            })
-            ->with('payment')
-            ->latest()
-            ->first();
-
-        if ($activePendingOrder) {
-            return view('customer.checkout_pending', compact('activePendingOrder'));
-        }
-
         $addresses = $request->user()->addresses()
             ->with('deliveryZone')
             ->orderByDesc('is_default')
@@ -132,8 +117,9 @@ class CheckoutController extends Controller
                 'shipping_price'    => 'required|integer|min:0', 
                 'notes'             => 'nullable|string|max:500',
             ]);
+            \Illuminate\Support\Facades\Log::info('[checkout_trace] VALIDATION_PASSED');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            \Illuminate\Support\Facades\Log::info('[checkout_trace] VALIDATION_EXCEPTION', [
+            \Illuminate\Support\Facades\Log::info('[checkout_trace] EXCEPTION', [
                 'class' => get_class($e),
                 'message' => $e->getMessage(),
                 'expects_json' => $request->expectsJson(),
@@ -143,29 +129,6 @@ class CheckoutController extends Controller
             ]);
             throw $e;
         }
-
-        // 0. Idempotency Lock: Prevent Double Checkout Race Condition
-        $lock = \Illuminate\Support\Facades\Cache::lock('checkout_user_' . $request->user()->id, 10);
-        
-        if (!$lock->get()) {
-            return $this->respondError($request, 'Permintaan sedang diproses. Mohon tunggu sesaat.');
-        }
-
-        // Final guard to prevent duplicate pending orders at store time
-            $activePendingOrder = \App\Models\Order::where('user_id', $request->user()->id)
-                ->where('status', 'pending')
-                ->whereHas('payment', function($q) {
-                    $q->where('status', 'pending')
-                      ->where('expires_at', '>', now());
-                })
-                ->exists();
-
-            if ($activePendingOrder) {
-                $lock->release();
-                return $this->respondError($request, 'Anda memiliki pesanan yang masih menunggu pembayaran. Selesaikan atau batalkan pesanan tersebut terlebih dahulu.');
-            }
-
-            \Illuminate\Support\Facades\Log::info('[checkout_trace] VALIDATION_PASSED');
 
         try {
             // 1. Verify address belongs to authenticated user
@@ -287,7 +250,6 @@ class CheckoutController extends Controller
             ]);
 
             if ($request->expectsJson()) {
-                $lock->release();
                 return response()->json([
                     'success' => true,
                     'redirect_url' => $redirectUrl,
@@ -295,11 +257,9 @@ class CheckoutController extends Controller
                 ]);
             }
 
-            $lock->release();
             return redirect($redirectUrl)->with('success', 'Pesanan berhasil dibuat! Silakan selesaikan pembayaran Anda.');
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            $lock->release();
             \Illuminate\Support\Facades\Log::info('[checkout_trace] EXCEPTION', [
                 'class' => get_class($e),
                 'message' => $e->getMessage(),
@@ -309,7 +269,6 @@ class CheckoutController extends Controller
             ]);
             return $this->respondError($request, 'Alamat tidak ditemukan.');
         } catch (\Exception $e) {
-            $lock->release();
             \Illuminate\Support\Facades\Log::info('[checkout_trace] EXCEPTION', [
                 'class' => get_class($e),
                 'message' => $e->getMessage(),

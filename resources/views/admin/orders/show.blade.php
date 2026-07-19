@@ -133,36 +133,6 @@
                 </div>
             </div>
 
-            <!-- Payment Provider Info -->
-            @php
-                $payment = \App\Models\Payment::where('order_id', $order->id)->latest()->first();
-            @endphp
-            @if($payment)
-                <div class="bg-white rounded-3xl border border-stone-200 p-6 shadow-sm space-y-4">
-                    <h3 class="font-bold text-stone-900 text-base border-b border-stone-150 pb-3">Status Sistem Pembayaran</h3>
-                    <div class="space-y-2 text-xs">
-                        <div class="flex justify-between">
-                            <span class="text-stone-500">Provider</span>
-                            <span class="font-bold text-stone-850 uppercase">{{ $payment->provider }}</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-stone-500">Status</span>
-                            <span class="font-bold text-stone-850 uppercase">{{ $payment->status }}</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-stone-500">Transaction ID</span>
-                            <span class="font-mono text-stone-850">{{ $payment->transaction_id ?? '-' }}</span>
-                        </div>
-                        @if($payment->paid_at)
-                            <div class="flex justify-between">
-                                <span class="text-stone-500">Dibayar Pada</span>
-                                <span class="font-bold text-green-700">{{ $payment->paid_at->format('d M Y H:i:s') }}</span>
-                            </div>
-                        @endif
-                    </div>
-                </div>
-            @endif
-
             <!-- Proof Image -->
             @if($order->payment_proof)
                 <div class="bg-white rounded-3xl border border-stone-200 p-6 shadow-sm space-y-4">
@@ -190,20 +160,14 @@
                     
                     <div class="flex flex-col gap-2.5">
                         @if($order->status === 'pending')
-                            @if(!$payment || $payment->provider !== 'midtrans')
-                                <form method="POST" action="{{ route('admin.orders.update_status', $order->id) }}">
-                                    @csrf
-                                    @method('PATCH')
-                                    <input type="hidden" name="status" value="paid">
-                                    <button type="submit" class="w-full bg-amber-700 hover:bg-amber-800 text-white font-bold py-3 rounded-xl shadow text-xs transition">
-                                        Konfirmasi Pembayaran (Tandai PAID)
-                                    </button>
-                                </form>
-                            @else
-                                <div class="bg-blue-50 border border-blue-100 p-4 rounded-xl text-xs text-blue-800 text-center">
-                                    Pembayaran online (Midtrans). Status PAID akan diperbarui secara otomatis melalui Webhook.
-                                </div>
-                            @endif
+                            <form method="POST" action="{{ route('admin.orders.update_status', $order->id) }}">
+                                @csrf
+                                @method('PATCH')
+                                <input type="hidden" name="status" value="paid">
+                                <button type="submit" class="w-full bg-amber-700 hover:bg-amber-800 text-white font-bold py-3 rounded-xl shadow text-xs transition">
+                                    Konfirmasi Pembayaran (Tandai PAID)
+                                </button>
+                            </form>
                             
                             <form method="POST" action="{{ route('admin.orders.update_status', $order->id) }}" onsubmit="return confirm('Apakah Anda yakin ingin membatalkan pesanan ini?')">
                                 @csrf

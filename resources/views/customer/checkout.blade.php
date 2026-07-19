@@ -33,6 +33,7 @@
 
                 let res = await fetch('{{ route('checkout.store') }}', {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: { 
                         'Accept': 'application/json',
                         'Content-Type': 'application/json',
@@ -42,15 +43,25 @@
                     body: JSON.stringify(payload)
                 });
 
-                let data = await res.json();
-                
+                let data;
+                try {
+                    data = await res.json();
+                } catch (jsonErr) {
+                    // Response was not JSON (e.g. 302 redirect HTML page) — server error
+                    console.error('[checkout] Non-JSON response:', res.status, res.url);
+                    this.errorMessage = 'Respons server tidak valid (status ' + res.status + '). Silakan coba lagi atau hubungi support.';
+                    this.isSubmitting = false;
+                    return;
+                }
+
                 if (res.ok && data.success) {
                     window.location.href = data.redirect_url;
                 } else {
-                    this.errorMessage = data.message || 'Gagal memproses pesanan. Silakan coba lagi.';
+                    this.errorMessage = data.message || 'Gagal memproses pesanan (status ' + res.status + '). Silakan coba lagi.';
                     this.isSubmitting = false;
                 }
             } catch (e) {
+                console.error('[checkout] Fetch error:', e);
                 this.errorMessage = 'Terjadi kesalahan jaringan atau server. Silakan coba lagi.';
                 this.isSubmitting = false;
             }

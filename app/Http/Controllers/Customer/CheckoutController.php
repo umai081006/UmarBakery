@@ -249,7 +249,7 @@ class CheckoutController extends Controller
                 'redirect_url' => $redirectUrl
             ]);
 
-            if ($request->wantsJson()) {
+            if ($request->expectsJson()) {
                 return response()->json([
                     'success' => true,
                     'redirect_url' => $redirectUrl,
@@ -283,7 +283,7 @@ class CheckoutController extends Controller
 
     private function respondError(Request $request, string $message, string $redirect = null)
     {
-        if ($request->wantsJson()) {
+        if ($request->expectsJson()) {
             return response()->json([
                 'success' => false,
                 'message' => $message,

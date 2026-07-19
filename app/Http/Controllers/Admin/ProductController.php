@@ -67,7 +67,7 @@ class ProductController extends Controller
                 'category_id' => $request->category_id,
                 'name' => $request->name,
                 'slug' => Str::slug($request->name) . '-' . time(),
-                'sku' => $request->sku ? strtoupper($request->sku) : 'TEMP',
+                'sku' => $request->sku ? strtoupper($request->sku) : uniqid('TEMP_'),
                 'description' => $request->description,
                 'composition' => $request->composition,
                 'price' => $request->price,

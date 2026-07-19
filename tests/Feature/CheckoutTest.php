@@ -91,4 +91,33 @@ class CheckoutTest extends TestCase
         $this->assertNotEquals(302, $response->getStatusCode(), "Validation failure returned 302 instead of 422 JSON");
         $response->assertStatus(422);
     }
+
+    public function test_prevent_double_checkout_race_condition()
+    {
+        $user = User::factory()->create(['email_verified_at' => now()]);
+
+        // Simulate that another request has already acquired the lock
+        $lock = \Illuminate\Support\Facades\Cache::lock('checkout_user_' . $user->id, 10);
+        $lock->get(); // Acquire the lock manually
+
+        $response = $this->actingAs($user)
+            ->postJson(route('checkout.store'), [
+                'address_id' => 1,
+                'courier_name' => 'JNE',
+                'courier_service' => 'REG',
+                'shipping_type' => 'biteship',
+                'shipping_price' => 10000,
+            ], [
+                'Accept' => 'application/json',
+                'X-Requested-With' => 'XMLHttpRequest',
+            ]);
+
+        $response->assertStatus(400)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Permintaan sedang diproses. Mohon tunggu sesaat.',
+            ]);
+
+        $lock->release(); // Clean up
+    }
 }

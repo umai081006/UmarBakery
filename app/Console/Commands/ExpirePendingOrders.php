@@ -55,6 +55,13 @@ class ExpirePendingOrders extends Command
                     }
                     $count++;
                     $this->info("Expired payment ID: {$lockedPayment->id} (Order: {$lockedPayment->order_id})");
+                    
+                    \Illuminate\Support\Facades\Log::info('payment.expired', [
+                        'event' => 'payment.expired',
+                        'payment_id' => $lockedPayment->id,
+                        'order_id' => $lockedPayment->order_id,
+                        'stock_restored' => true,
+                    ]);
                 }
             });
         }

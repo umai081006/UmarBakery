@@ -155,9 +155,15 @@ class OrderService
 
             $lockedOrder->update($updateData);
 
-            // If transitioned to cancelled, restore stock
+            // If transitioned to cancelled, restore stock and cancel payment
             if ($newStatus === 'cancelled') {
                 $this->restoreStock($lockedOrder);
+                
+                // Cancel pending payment if exists
+                $payment = \App\Models\Payment::where('order_id', $lockedOrder->id)->where('status', 'pending')->first();
+                if ($payment) {
+                    $payment->update(['status' => 'cancelled']);
+                }
             }
 
             return $lockedOrder;

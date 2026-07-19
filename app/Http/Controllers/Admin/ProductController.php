@@ -47,7 +47,7 @@ class ProductController extends Controller
         $request->validate([
             'category_id' => 'required|exists:categories,id',
             'name' => 'required|string|max:255',
-            'sku' => 'required|string|unique:products,sku|max:50',
+            'sku' => 'nullable|string|unique:products,sku|max:50',
             'description' => 'required|string',
             'composition' => 'nullable|string',
             'price' => 'required|numeric|min:0',
@@ -63,11 +63,11 @@ class ProductController extends Controller
                 $imageUrl = $this->cloudinaryService->upload($request->file('image'), 'products');
             }
 
-            Product::create([
+            $product = Product::create([
                 'category_id' => $request->category_id,
                 'name' => $request->name,
                 'slug' => Str::slug($request->name) . '-' . time(),
-                'sku' => strtoupper($request->sku),
+                'sku' => $request->sku ? strtoupper($request->sku) : 'TEMP',
                 'description' => $request->description,
                 'composition' => $request->composition,
                 'price' => $request->price,
@@ -76,6 +76,12 @@ class ProductController extends Controller
                 'image_url' => $imageUrl,
                 'is_active' => $request->has('is_active'),
             ]);
+
+            if (empty($request->sku)) {
+                $product->update([
+                    'sku' => 'UB-PRD-' . str_pad($product->id, 6, '0', STR_PAD_LEFT)
+                ]);
+            }
 
             return redirect()->route('admin.products.index')->with('success', 'Roti berhasil ditambahkan!');
         } catch (Exception $e) {

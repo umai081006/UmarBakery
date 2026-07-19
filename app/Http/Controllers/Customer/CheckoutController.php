@@ -43,6 +43,21 @@ class CheckoutController extends Controller
             return redirect()->route('cart.index')->with('error', 'Keranjang belanja Anda kosong.');
         }
 
+        // Check for active pending payment (Phase 3: Active Pending Order UX)
+        $activePendingOrder = \App\Models\Order::where('user_id', $request->user()->id)
+            ->where('status', 'pending')
+            ->whereHas('payment', function($q) {
+                $q->where('status', 'pending')
+                  ->where('expires_at', '>', now());
+            })
+            ->with('payment')
+            ->latest()
+            ->first();
+
+        if ($activePendingOrder) {
+            return view('customer.checkout_pending', compact('activePendingOrder'));
+        }
+
         $addresses = $request->user()->addresses()
             ->with('deliveryZone')
             ->orderByDesc('is_default')
@@ -117,6 +132,20 @@ class CheckoutController extends Controller
                 'shipping_price'    => 'required|integer|min:0', 
                 'notes'             => 'nullable|string|max:500',
             ]);
+        
+        // Final guard to prevent duplicate pending orders at store time
+        $activePendingOrder = \App\Models\Order::where('user_id', $request->user()->id)
+            ->where('status', 'pending')
+            ->whereHas('payment', function($q) {
+                $q->where('status', 'pending')
+                  ->where('expires_at', '>', now());
+            })
+            ->exists();
+
+        if ($activePendingOrder) {
+            return $this->respondError($request, 'Anda memiliki pesanan yang masih menunggu pembayaran. Selesaikan atau batalkan pesanan tersebut terlebih dahulu.');
+        }
+
             \Illuminate\Support\Facades\Log::info('[checkout_trace] VALIDATION_PASSED');
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Illuminate\Support\Facades\Log::info('[checkout_trace] EXCEPTION', [
